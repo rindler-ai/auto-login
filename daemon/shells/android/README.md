@@ -33,6 +33,44 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 Then in the app: **Pair** (paste a code from your hub → Settings → Devices)
 → **Add a login** → **Start relay**.
 
+## Install warnings & a release-signed APK
+
+Sideloading (installing outside Google Play) shows warnings in three layers, with
+different fixes:
+
+1. **"Install unknown apps / not allowed from this source"** — the OS blocks any
+   non-Play install until you grant that source (your browser or Files app) the
+   permission, once, in Settings. **Inherent to sideloading** — only Google Play (or
+   a preinstalled/MDM app) removes it; no app-side fix.
+2. **Play Protect "unrecognized app" + a debug-certificate warning** — `assembleDebug`
+   signs with the throwaway debug keystore, which Play Protect flags hardest. Build a
+   **release-signed** APK instead to drop the debug-cert warning:
+
+   ```sh
+   # one-time: create a keystore (keep release.jks + its passwords safe and private)
+   keytool -genkeypair -v -keystore release.jks -alias autologin \
+     -keyalg RSA -keysize 2048 -validity 10000
+   # build release, signed (properties can also live in ~/.gradle/gradle.properties)
+   ./gradlew assembleRelease \
+     -PRELEASE_STORE_FILE=$PWD/release.jks -PRELEASE_STORE_PASSWORD=… \
+     -PRELEASE_KEY_ALIAS=autologin -PRELEASE_KEY_PASSWORD=…
+   #   -> app/build/outputs/apk/release/app-release.apk   (v2/v3 signed, non-debuggable)
+   adb install -r app/build/outputs/apk/release/app-release.apk
+   ```
+
+   (Without the `RELEASE_STORE_FILE` property the release APK is **unsigned** and won't
+   install until signed with `apksigner`.) The **unknown-developer** flag and the
+   `RECEIVE_SMS` flag below still apply on sideload regardless of signing.
+3. **`RECEIVE_SMS` permission** — the biggest Play Protect trigger, and a *restricted*
+   permission on the Play Store (limited to the default SMS handler). The permission-free
+   fix is the **SMS User Consent API** (a one-time per-message system consent sheet, no
+   `RECEIVE_SMS`), which is also the path to a Play Store listing.
+
+**Bottom line:** a release-signed APK removes the debug-cert warning; the "unknown
+sources" prompt and Play Protect's unknown-developer/SMS flags are only fully removed by
+distributing through **Google Play** (which additionally needs the `RECEIVE_SMS` →
+SMS-User-Consent migration).
+
 ## Files
 
 | File | Role |

@@ -53,6 +53,26 @@ android {
         }
     }
 
+    signingConfigs {
+        // Release signing. A release-signed APK (v2/v3, non-debug certificate)
+        // avoids the debug-certificate install warning that a plain `assembleDebug`
+        // APK triggers on sideload. Supply a keystore via ~/.gradle/gradle.properties
+        // or -P flags:
+        //   RELEASE_STORE_FILE=/abs/path/release.jks   RELEASE_STORE_PASSWORD=…
+        //   RELEASE_KEY_ALIAS=autologin                RELEASE_KEY_PASSWORD=…
+        // Generate one: keytool -genkeypair -v -keystore release.jks -alias autologin \
+        //   -keyalg RSA -keysize 2048 -validity 10000
+        // Without these properties this config is inert (see the release buildType).
+        create("release") {
+            (project.findProperty("RELEASE_STORE_FILE") as String?)?.let { path ->
+                storeFile = file(path)
+                storePassword = project.findProperty("RELEASE_STORE_PASSWORD") as String?
+                keyAlias = project.findProperty("RELEASE_KEY_ALIAS") as String?
+                keyPassword = project.findProperty("RELEASE_KEY_PASSWORD") as String?
+            }
+        }
+    }
+
     buildTypes {
         debug {
             // Debug builds target DEV so a plain `assembleDebug` pairs against the
@@ -70,6 +90,14 @@ android {
             buildConfigField("String", "PRIVACY_POLICY_URL", "\"$privacy\"")
         }
         release {
+            // Sign with the release keystore when one is supplied (see signingConfigs
+            // above). A release-signed, non-debuggable APK is what removes the
+            // debug-certificate install warning. If no keystore is provided the APK
+            // is UNSIGNED and must be signed with `apksigner` before it will install.
+            if (project.hasProperty("RELEASE_STORE_FILE")) {
+                signingConfig = signingConfigs.getByName("release")
+            }
+            isDebuggable = false
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
