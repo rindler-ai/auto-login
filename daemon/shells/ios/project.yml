@@ -1,0 +1,45 @@
+# XcodeGen project definition for the Auto-Login iOS + macOS shells.
+# Generate with `make ios-app` (runs `xcodegen generate`). The .xcodeproj is
+# gitignored — this file is the committed source of truth.
+name: Custody
+options:
+  bundleIdPrefix: ai.rindler
+  deploymentTarget:
+    iOS: "16.0"
+    macOS: "13.0"
+targets:
+  CustodyiOS:
+    type: application
+    platform: iOS
+    # PrivacyInfo.xcprivacy must be BUNDLED (it is read from the .app at review
+    # time, not compiled). The Go core links mach_absolute_time, a required-reason
+    # API — see the manifest's header comment. Without this the upload earns
+    # ITMS-91053.
+    sources:
+      - Sources
+      - path: PrivacyInfo.xcprivacy
+        buildPhase: resources
+    dependencies:
+      - framework: Custody.xcframework
+        embed: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: ai.rindler.autologin
+        INFOPLIST_KEY_CFBundleDisplayName: "Auto-Login"
+        GENERATE_INFOPLIST_FILE: "YES"
+  CustodyMac:
+    type: application
+    platform: macOS
+    sources:
+      - Sources
+      - path: PrivacyInfo.xcprivacy
+        buildPhase: resources
+    dependencies:
+      - framework: Custody.xcframework
+        embed: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: ai.rindler.autologin.mac
+        INFOPLIST_KEY_CFBundleDisplayName: "Auto-Login"
+        INFOPLIST_KEY_LSUIElement: "YES"
+        GENERATE_INFOPLIST_FILE: "YES"

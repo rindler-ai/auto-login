@@ -1,0 +1,164 @@
+# Device-relay protocol contract.
+#
+# The wire contract between the customer's local credential-custody app and the
+# device hub server. Kept LANGUAGE-AGNOSTIC here so the client's implementation
+# language stays a reversible choice and the server cannot tell a desktop relay
+# from a mobile one. The server keeps a hand-authored Go binding of these messages,
+# validated against this file by a contract test; other-language clients read this
+# file + the golden vector directly.
+#
+# INVARIANT: no message on this wire may carry a DURABLE secret. TOTP seeds and
+# mailbox OAuth tokens NEVER transit — the device generates the code locally and
+# relays only the code. Only the username/password pair and short-lived one-time
+# codes ever cross the wire, and only inside the HPKE-sealed SecretRelease.
+
+# v2: the SecretPing is now server-signed so the device can authenticate the
+# worker_ephemeral_pubkey. BREAKING: devices paired under v1 hold no server_pubkey and
+# must re-pair. There is deliberately NO "unsigned pings still accepted" fallback --
+# that would reinstate the key-substitution attack this version exists to close.
+version: 2
+
+# The secret a single ping asks for / a single release carries. Exactly one
+# secret per ping (never the whole vault). `password` is the only durable value
+# that transits; everything else is a short-lived one-time code.
+secret_kinds:
+  - username        # account identifier (not itself secret, sealed anyway)
+  - password        # the one durable secret that transits, in-memory only
+  - totp_code       # 6-digit RFC-6238 code, generated on-device from a seed that never transits
+  - email_otp_code  # code read on-device via device-local mailbox OAuth (token never transits)
+  - sms_otp_code    # code captured on-device (Android SMS User Consent / manual)
+  - manual_code     # user typed the code into the manual-entry sheet
+
+# HPKE suite for the inner end-to-end seal (RFC 9180 base mode). The device
+# seals the released secret to the login worker's PER-LOGIN ephemeral public key,
+# so only that worker process can open it and no intermediary hop (device hub,
+# gateway, load balancer) sees plaintext. Matches Go std crypto/hpke:
+# DHKEM(ecdh.X25519()) + HKDFSHA256() + AES256GCM().
+hpke_suite:
+  kem: DHKEM-X25519-HKDF-SHA256   # 0x0020
+  kdf: HKDF-SHA256                # 0x0001
+  aead: AES-256-GCM               # 0x0002
+  mode: base                      # RFC 9180 mode 0 (no PSK, no sender auth)
+
+# Message shapes. All are JSON on the wire. Field names are the JSON keys.
+messages:
+
+  # device -> server: begin pairing. Presented with a short-lived single-use
+  # pairing token minted by the web app (/settings/devices). The device_pubkey is
+  # the device's long-lived signing key (kept non-exportable in the OS
+  # keychain / secure enclave); the server binds it to the user at completion.
+  DevicePairRequest:
+    fields:
+      pairing_token: string   # single-use, TTL-bounded, minted server-side
+      device_name: string     # user-facing label ("My MacBook")
+      platform: string        # macos | windows | linux | ios | android
+      device_pubkey: bytes    # Ed25519 public key (base64 on the wire)
+
+  # server -> device: pairing result. device_id keys the per-user registry row.
+  # server_pubkey provisions the device with the key it uses to AUTHENTICATE every
+  # later SecretPing. Without it a device cannot tell a genuine
+  # worker_ephemeral_pubkey from one an on-path attacker substituted, so a device
+  # that holds no server_pubkey MUST decline every ping.
+  DevicePairComplete:
+    fields:
+      device_id: string       # UUID of the custody_devices row
+      status: string          # ok | rejected
+      reason: string          # set when status=rejected
+      server_pubkey: bytes    # Ed25519 PUBLIC key (base64); verifies SecretPing.server_signature
+
+  # server -> device: ask for exactly one secret for one in-flight login. The
+  # worker_ephemeral_pubkey is the HPKE recipient key; the challenge is a fresh
+  # server nonce the device signs (anti-replay). request_id is single-use.
+  #
+  # server_signature AUTHENTICATES the worker_ephemeral_pubkey. Before this
+  # existed, nothing bound that key to the server: an active on-path party could
+  # substitute its own X25519 key and the device would seal the real credential
+  # straight to the attacker. The device MUST verify this signature BEFORE sealing,
+  # and MUST decline (without prompting the user) if it does not verify.
+  SecretPing:
+    fields:
+      request_id: string              # single-use; ties the release back to the paused login
+      site: string                    # display domain of the login this ping serves (logging/UI)
+      secret_kind: string             # one of secret_kinds
+      worker_ephemeral_pubkey: bytes  # HPKE recipient X25519 pubkey (base64), per-login
+      challenge: bytes                # server nonce (base64), signed in the release
+      ttl_seconds: int                # release must arrive within this window
+      server_signature: bytes         # Ed25519 sig (base64) over ping_signing_message; see signing below
+
+  # device -> server: release ONE secret, HPKE-sealed to the worker key, after
+  # explicit per-secret user approval. device_signature now also covers the worker
+  # pubkey, so a substitution is detectable in BOTH directions.
+  SecretRelease:
+    fields:
+      request_id: string       # echoes the ping; single-use
+      sealed_secret: bytes     # HPKE ciphertext (base64); opens ONLY in the worker
+      device_signature: bytes  # Ed25519 sig over release_signing_message; see signing below
+
+# Canonical signing encodings. Both implementations -- packages/custody-app/relay
+# (client) and the server's device-relay package (server) -- are deliberately SEPARATE
+# implementations and MUST produce these bytes identically; the golden-vector test is
+# what proves they agree.
+#
+# Fields are LENGTH-PREFIXED, not separator-joined. A 0x1f-joined encoding is
+# ambiguous over variable-length binary fields, and the attacker in this threat model
+# fully controls worker_ephemeral_pubkey's bytes -- exactly where ambiguity must not
+# exist. The distinct domain tags mean a ping signature can never be replayed as a
+# release signature, or vice versa.
+signing:
+  field_encoding: "enc(x) = uint32be(len(x)) || x   # strings are UTF-8"
+
+  ping_signing_message:   # signed by the SERVER, verified by the device
+    domain_tag: rindler-device-relay/ping/v2
+    fields: [domain_tag, request_id, site, secret_kind, worker_ephemeral_pubkey, challenge, ttl_seconds]
+    notes: ttl_seconds is encoded as its decimal ASCII form (e.g. "30")
+
+  release_signing_message:  # signed by the DEVICE, verified by the server
+    domain_tag: rindler-device-relay/release/v2
+    fields: [domain_tag, request_id, challenge, worker_ephemeral_pubkey, sealed_secret]
+
+# Pairing-code binding (follow-up: closes pairing-channel TOFU). The device
+# trusted server_pubkey purely on-first-use from the pair/complete HTTPS response,
+# so a MITM on that unattended call could substitute its own key. We bind a
+# fingerprint of the lane's server_pubkey into the pairing CODE, which travels the
+# clean authenticated-browser -> human -> device channel the attacker is not on. The
+# device recomputes the fingerprint over the server_pubkey it received and rejects
+# on mismatch. The DevicePairRequest/DevicePairComplete WIRE shapes are UNCHANGED --
+# the binding is device-side verification, not a new wire field.
+pairing_code:
+  prefix: "cd_pair2_"                       # was cd_pair_ (v1); rides the v1->v2 re-pair break
+  body: "hex( 16-byte random token || 16-byte pairing_fingerprint )"   # 64 lowercase hex chars
+  storage: "SHA-256(full code string)"      # server persists only the hash; code stays opaque
+  notes: >
+    Online-guessing entropy is the 128-bit random token half (the fingerprint is a
+    public per-lane constant). Single-use + 10-min TTL + per-user cap + per-IP rate
+    limit bound guessing.
+
+pairing_fingerprint:  # computed by BOTH impls; MUST produce identical bytes
+  field_encoding: "enc(x) = uint32be(len(x)) || x"   # the same helper as signing
+  domain_tag: rindler-device-relay/pairing-fp/v2
+  input: "enc(domain_tag) || enc(server_pubkey_raw)"  # server_pubkey_raw = 32 Ed25519 bytes, or 0 bytes on a keyless lane
+  hash: "SHA-256, truncated to the first 16 bytes (128-bit second-preimage target)"
+  golden_vectors:
+    server_pubkey_01..20: "0f109e9ce4b15ffb09b42256f901c8ee"   # 32 bytes {byte i = i+1}
+    keyless_empty_key: "2c4b6e9960d586e2b25c840d2e62e40e"
+
+  # server -> device: terminal receipt so the device can clear its pending state.
+  Ack:
+    fields:
+      request_id: string
+      status: string           # filled | declined | timeout | error
+
+  # server -> device: ask which sites the device holds a login for, so the server
+  # can prefer the device-relay lane over proposing a hosted-browser Connect
+  # handoff. Asks for NO secret; the reply is domains only (never a credential).
+  SiteInventoryRequest:
+    fields:
+      request_id: string       # single-use; ties the reply back to the query
+
+  # device -> server: the domains this device can serve a login for. DOMAINS ONLY
+  # — never a credential — so the server learns only "can this device help with
+  # site X", never the login itself. Preserves the no-durable-secret invariant.
+  SiteInventoryReply:
+    fields:
+      request_id: string       # echoes the request
+      domains: list[string]    # e.g. ["bankofamerica.com", "instacart.com"]

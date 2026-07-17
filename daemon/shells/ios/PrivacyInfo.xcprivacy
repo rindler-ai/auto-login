@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Apple privacy manifest for the Auto-Login iOS/macOS app.
+
+  Two things are declared here, and BOTH were verified empirically against the
+  built binaries rather than guessed (guessing is how you earn an ITMS-91053
+  rejection on first upload):
+
+  1. NSPrivacyAccessedAPICategorySystemBootTime — REQUIRED, and easy to miss.
+     The app's own Swift binary links NO required-reason API. The Go core does:
+     `nm -u Custody.xcframework/<slice>/Custody.framework/Custody` shows
+     `mach_absolute_time` as an undefined symbol in ALL THREE slices
+     (ios-arm64, ios-arm64_x86_64-simulator, macos-arm64_x86_64). That is the Go
+     runtime's monotonic clock (runtime.nanotime), and mach_absolute_time() is on
+     Apple's required-reason list under "System boot time APIs". gomobile emits no
+     PrivacyInfo.xcprivacy of its own, so this app-level manifest is the only place
+     it can be declared. Reason 35F9.1 ("measure the amount of time that has elapsed
+     between events that occurred within the app") is the honest fit for a monotonic
+     clock. Re-run that nm scan if the Go core gains dependencies.
+
+  2. NSPrivacyCollectedDataTypeEmailsOrTextMessages — the SMS body a user's own
+     Shortcuts automation hands to ForwardMessageIntent. Declared conservatively.
+     Apple's strict definition of "collect" (retained beyond servicing the request
+     in real time) arguably does NOT cover it — the server's SMS-relay handler is
+     consume-and-forget, there is no sms_body column, and
+     TestIngestHandler_NeverLogsRawMessageOrCode asserts it never reaches a log
+     line — but under-declaring reads as concealment, so we declare it and mark it
+     unlinked and untracked, which is what the data actually is.
+
+  NSPrivacyTracking is false and NSPrivacyTrackingDomains is empty because the app
+  contains no analytics, advertising, or crash-reporting SDK and makes no network
+  call to any host but the configured hub's. Keep it that way; adding one changes this file.
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>NSPrivacyTracking</key>
+  <false/>
+
+  <key>NSPrivacyTrackingDomains</key>
+  <array/>
+
+  <key>NSPrivacyCollectedDataTypes</key>
+  <array>
+    <dict>
+      <key>NSPrivacyCollectedDataType</key>
+      <string>NSPrivacyCollectedDataTypeEmailsOrTextMessages</string>
+      <key>NSPrivacyCollectedDataTypeLinked</key>
+      <false/>
+      <key>NSPrivacyCollectedDataTypeTracking</key>
+      <false/>
+      <key>NSPrivacyCollectedDataTypePurposes</key>
+      <array>
+        <string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+      </array>
+    </dict>
+  </array>
+
+  <key>NSPrivacyAccessedAPITypes</key>
+  <array>
+    <dict>
+      <key>NSPrivacyAccessedAPIType</key>
+      <string>NSPrivacyAccessedAPICategorySystemBootTime</string>
+      <key>NSPrivacyAccessedAPITypeReasons</key>
+      <array>
+        <string>35F9.1</string>
+      </array>
+    </dict>
+  </array>
+</dict>
+</plist>

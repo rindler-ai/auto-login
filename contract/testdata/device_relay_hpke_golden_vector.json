@@ -1,0 +1,16 @@
+{
+  "_comment": "SHARED cross-language HPKE golden vector for the device-relay inner seal. SYNTHETIC, not a real secret. RFC 9180 base mode, DHKEM(X25519,HKDF-SHA256)+HKDF-SHA256+AES-256-GCM. Because HPKE Seal draws a random ephemeral key, the ciphertext is NOT reproducible byte-for-byte; the deterministic, checkable direction is Open: any language's HPKE Open of ciphertext_b64 with worker_private_key_b64 (RFC 9180 serialization) under info_b64 must recover plaintext_utf8. worker_public_key_b64 is the recipient key that traveled in the SecretPing. Do NOT edit ciphertext_b64 to paper over a mismatch: a divergence is a real interop bug. Regenerate with scratchpad genvec.",
+  "ciphertext_b64": "P8qzsM0dn/Le72g8dBeCutLhd8Mx1BLNSbv636VoDwlVmEo1+qwNBW2d60pYz9FedFUH9dUPA4PPKdwmldnJu0383kqxMnRryFDC2vxnPScKpRkE3A==",
+  "info_b64": "cmluZGxlci1kZXZpY2UtcmVsYXktdjEfcmVxLWdvbGRlbi0wMDAxH2V4YW1wbGUtYXV0aC1zaXRlLmNvbR9wYXNzd29yZA==",
+  "info_fields": {
+    "prefix": "rindler-device-relay-v1",
+    "request_id": "req-golden-0001",
+    "secret_kind": "password",
+    "separator": "0x1f",
+    "site": "example-auth-site.com"
+  },
+  "plaintext_utf8": "golden-vector-relayed-secret-not-real",
+  "suite": "DHKEM-X25519-HKDF-SHA256/HKDF-SHA256/AES-256-GCM",
+  "worker_private_key_b64": "+LN1EhH0NN6MoZiDgP0iY8Npkp56ZkGqdqP3fBW2EH4=",
+  "worker_public_key_b64": "KX63WnzsBZuYKaTM8DBsMsNEqe0RECem1m9gxxR+MQ8="
+}

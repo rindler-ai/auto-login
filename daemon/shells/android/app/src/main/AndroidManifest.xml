@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Always-on relay: a foreground service holds the hub connection so the user
+         never has to reopen the app. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- RECEIVE_SMS gates auto-filling a login's 2FA code. It is requested ONCE, at the
+         moment the user flips the "Fill in codes from a text" toggle in Settings (an
+         Activity is in the foreground then); if they deny, the toggle stays off. This is
+         the deliberate model: the app runs as a background daemon (closed), so it must
+         hold the permission up front — it cannot pop a per-message consent dialog from
+         the background (Android 10+ forbids background activity launches). The SMS User
+         Consent API was tried and reverted for exactly that reason: it prompts
+         per text and needs a foreground Activity, so it never worked while closed. Play's
+         SMS policy reserves RECEIVE_SMS for the default SMS handler, so this app is
+         side-load-only by design — which its function (background bank-OTP reading)
+         requires regardless of API. sms/SmsReceiver still forwards ONLY the extracted
+         code (on-device), never the message body. -->
+    <uses-permission android:name="android.permission.RECEIVE_SMS" />
+    <uses-feature android:name="android.hardware.telephony" android:required="false" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+
+    <application
+        android:allowBackup="false"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:label="@string/app_name"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.AutoLogin">
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:label="@string/app_name">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- Reads an incoming verification text in the BACKGROUND (fires even while the
+             app is closed — the whole point of the daemon model) and hands only its code
+             to the paused login. Manifest-declared so the OS delivers SMS_RECEIVED without
+             the app running. Exported (a system broadcast) and guarded by BROADCAST_SMS —
+             a permission only the OS holds — so no other app can spoof a text at us. Inert
+             unless the user opted in (SmsReceiver checks isSmsAutoReadEnabled); it fires at
+             all only once RECEIVE_SMS is granted, which happens at the Settings toggle. -->
+        <receiver
+            android:name=".sms.SmsReceiver"
+            android:exported="true"
+            android:enabled="true"
+            android:permission="android.permission.BROADCAST_SMS">
+            <intent-filter>
+                <action android:name="android.provider.Telephony.SMS_RECEIVED" />
+            </intent-filter>
+        </receiver>
+
+        <!-- The relay lives here, not in the Activity, so it survives app close.
+             START_STICKY (in code) + the boot receiver keep it running. -->
+        <service
+            android:name=".RelayService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+
+        <receiver
+            android:name=".BootReceiver"
+            android:exported="true"
+            android:enabled="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
+    </application>
+
+</manifest>

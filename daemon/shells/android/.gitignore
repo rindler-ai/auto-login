@@ -1,0 +1,12 @@
+*.iml
+.gradle/
+.kotlin/
+/local.properties
+/.idea/
+/build/
+/app/build/
+# The Go core binding is a build artifact — regenerate with `make android`.
+/app/libs/*.aar
+/app/libs/*.jar
+.DS_Store
+/captures/

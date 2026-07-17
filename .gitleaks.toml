@@ -1,0 +1,84 @@
+# gitleaks configuration for the Auto-Login public repository.
+#
+# Extends the default gitleaks ruleset (generic API keys, tokens, private keys,
+# cloud creds) with a custom DENIAL ruleset for Rindler-internal infrastructure,
+# so a contributor can never re-bake a private hostname or vendor reference into
+# the tree. Any hit fails the CI secret-scan gate.
+
+title = "Auto-Login secret + infra denial ruleset"
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "rindler-hub-hostname"
+description = "Rindler-operated hub hostname (chat/mcp/agents.rindler.ai) must never be baked in — use a config placeholder"
+regex = '''(?i)[a-z0-9-]+\.rindler\.ai'''
+tags = ["infra", "hostname"]
+
+[[rules]]
+id = "rindler-host-in-url"
+description = "Rindler-owned host in a URL, incl. the apex rindler.ai (e.g. https://rindler.ai/...) — use a config placeholder, not a company URL"
+regex = '''(?i)(https?|wss?)://([a-z0-9-]+\.)*rindler\.ai'''
+tags = ["infra", "hostname"]
+
+[[rules]]
+id = "rindler-apex-host"
+description = "Bare apex rindler.ai (not a subdomain, not in a URL) — use a config placeholder. The security@rindler.ai disclosure contact (preceded by '@') is intentionally NOT matched."
+regex = '''(?i)(^|[^a-z0-9.@-])rindler\.ai'''
+tags = ["infra", "hostname"]
+
+[[rules]]
+id = "porter-preview-host"
+description = "Porter preview/deployment hostname"
+regex = '''(?i)[a-z0-9-]+\.onporter\.run'''
+tags = ["infra", "hostname"]
+
+[[rules]]
+id = "aws-rds-host"
+description = "AWS RDS database hostname"
+regex = '''(?i)[a-z0-9.-]+\.rds\.amazonaws\.com'''
+tags = ["infra", "hostname"]
+
+[[rules]]
+id = "infisical-ref"
+description = "Infisical secrets-manager reference"
+regex = '''(?i)\binfisical\b'''
+tags = ["infra", "vendor"]
+
+[[rules]]
+id = "inkbox-ref"
+description = "Inkbox mailbox reference"
+regex = '''(?i)\binkbox\b'''
+tags = ["infra", "vendor"]
+
+[[rules]]
+id = "porter-platform-ref"
+description = "Porter deployment-platform reference"
+regex = '''(?i)\bporter\b'''
+tags = ["infra", "vendor"]
+
+[[rules]]
+id = "kernel-browser-ref"
+description = "Kernel browser-infrastructure reference"
+regex = '''(?i)\bkernel\b'''
+tags = ["infra", "vendor"]
+
+[allowlist]
+description = "Files that legitimately contain the denied words (legal text, this ruleset, and the CI that enforces it) and known-safe strings"
+paths = [
+  '''LICENSE''',
+  '''COPYING\.GPL-3''',
+  '''\.gitleaks\.toml''',
+  '''\.github/workflows/.*''',
+]
+regexes = [
+  '''your-hub\.example''',                 # documented placeholder host
+  '''rindler-device-relay''',              # protocol domain tag (wire constant, not a host)
+  '''github\.com/rindler-ai''',            # publisher GitHub org (allowed)
+  '''ai\.rindler\.(autologin|mobile)''',   # app bundle id / gomobile package (allowed)
+  # Public RFC/synthetic TOTP test vectors used in *_test.go fixtures (not secrets):
+  '''MTIzNDU2Nzg5MDEyMzQ1Njc4OTA=''',      # base64 of the RFC 6238 test seed
+  '''12345678901234567890''',              # RFC 6238 test seed
+  '''JBSWY3DPEHPK3PXP''',                  # RFC 4648 base32 test vector
+]

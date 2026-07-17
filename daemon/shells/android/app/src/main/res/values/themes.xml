@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Plain platform theme; Compose supplies its own MaterialTheme at runtime. -->
+    <style name="Theme.AutoLogin" parent="android:Theme.Material.Light.NoActionBar" />
+</resources>
