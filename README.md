@@ -24,6 +24,23 @@ browser/Files app permission to install once). See
 for what each on-device prompt means and how to avoid them. iOS/macOS build from
 source on a Mac with Xcode — see [Build and run](#build-and-run) below.
 
+## Screenshots
+
+<table>
+  <tr>
+    <td align="center"><img src="docs/screenshots/01-onboarding-a.png" width="230" alt="Onboarding: your secrets stay on your device"><br><sub>Your secrets stay on your device</sub></td>
+    <td align="center"><img src="docs/screenshots/01-onboarding-b.png" width="230" alt="Onboarding: hands-free once set up"><br><sub>Hands-free once you're set up</sub></td>
+    <td align="center"><img src="docs/screenshots/02-pair.png" width="230" alt="Pair this device"><br><sub>Pair the device to your hub</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/screenshots/04-add-login.png" width="230" alt="Add a login, stored encrypted on-device"><br><sub>Add a login — stored encrypted on-device</sub></td>
+    <td align="center"><img src="docs/screenshots/05-home-with-login.png" width="230" alt="Home: relay active with a saved login"><br><sub>Relay active, logins ready</sub></td>
+    <td align="center"><img src="docs/screenshots/06-settings.png" width="230" alt="Settings: manage the paired device"><br><sub>Manage the paired device</sub></td>
+  </tr>
+</table>
+
+<sub>Captured from the Android app in an emulator with demo data — every value shown (e.g. <code>example.com</code>, <code>demo@example.com</code>) is fake; no real credentials.</sub>
+
 **Security posture, in two lines:**
 
 - Durable secrets are stored only on your device and never persist on any server.
