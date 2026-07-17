@@ -77,7 +77,7 @@ private val slides = listOf(
     Slide(
         Icons.Rounded.CloudOff,
         "Only for a verified request",
-        "Your phone releases a credential only to a request it cryptographically verifies is from the hub, for your account and that exact sign-in — and seals it end-to-end to that login's single-use key. It transits the hub in memory and is never stored in its vault.",
+        "Your phone releases a credential only to a request it cryptographically verifies is from the hub — for your account and that exact sign-in — sealed end-to-end to that login's single-use key so the hub can never read it.",
     ),
 )
 

@@ -3,14 +3,26 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
+    <!-- Rich emerald base (diagonal). -->
     <path android:pathData="M0,0 h108 v108 h-108 z">
         <aapt:attr xmlns:aapt="http://schemas.android.com/aapt" name="android:fillColor">
             <gradient
                 android:type="linear"
-                android:startX="0" android:startY="0"
-                android:endX="108" android:endY="108"
-                android:startColor="#13A97D"
-                android:endColor="#0B6A52" />
+                android:startX="10" android:startY="4"
+                android:endX="98" android:endY="104"
+                android:startColor="#16C08B"
+                android:endColor="#06543F" />
+        </aapt:attr>
+    </path>
+    <!-- Soft top-left glow for depth. -->
+    <path android:pathData="M0,0 h108 v108 h-108 z">
+        <aapt:attr xmlns:aapt="http://schemas.android.com/aapt" name="android:fillColor">
+            <gradient
+                android:type="radial"
+                android:centerX="36" android:centerY="30"
+                android:gradientRadius="84"
+                android:startColor="#3AFFFFFF"
+                android:endColor="#00FFFFFF" />
         </aapt:attr>
     </path>
 </vector>

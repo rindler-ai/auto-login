@@ -48,6 +48,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import coil.compose.SubcomposeAsyncImage
 
@@ -336,9 +337,10 @@ fun TrustFooter(modifier: Modifier = Modifier) {
         )
         Spacer(Modifier.width(7.dp))
         Text(
-            "Encrypted at rest · approved releases are end-to-end encrypted",
+            "Encrypted at rest · releases are end-to-end encrypted",
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
         )
     }
 }
