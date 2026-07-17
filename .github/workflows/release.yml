@@ -45,8 +45,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          # applicationId pin + version-field format
-          eval "$(./scripts/check-app-version.sh)"
+          # applicationId pin + version-field format (propagate the script's failure)
+          OUT="$(./scripts/check-app-version.sh)" || { echo "$OUT"; exit 1; }
+          eval "$OUT"
           TAG="${{ github.event.inputs.tag || github.ref_name }}"
           # the tag must name this exact versionName, so a release is never mislabelled
           [ "$TAG" = "v${VERSION_NAME}" ] || { echo "::error::tag '$TAG' != v${VERSION_NAME} (build.gradle.kts versionName). Bump versionName or fix the tag."; exit 1; }
