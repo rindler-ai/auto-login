@@ -1,0 +1,137 @@
+name: Release
+
+# Cut a versioned release with a downloadable APK. Tag the repo `vX.Y.Z` (matching
+# the app's versionName) and this builds the Android APK and publishes a GitHub
+# Release, so github.com/rindler-ai/auto-login/releases/latest is always the newest
+# installable build.
+#
+# Clean-update safety (Android rejects an update otherwise): the tag must equal
+# v<versionName>, versionCode must be strictly greater than the previous release's,
+# applicationId is pinned, and every release is signed with the SAME key — supply
+# a stable release keystore via repo secrets (see below), or an unsigned/debug
+# preview is published instead.
+#
+# Repo secrets for a proper release-signed APK (Settings -> Secrets and variables
+# -> Actions):
+#   ANDROID_KEYSTORE_BASE64   = base64 of your release.jks   (base64 -w0 release.jks)
+#   ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD
+# Keep the keystore + passwords backed up and private — losing them means you can
+# never ship an update the existing installs will accept.
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to build (e.g. v0.1.0) — must match versionName'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  android-apk:
+    name: Build + publish Android APK
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # need tag history for the versionCode monotonic check
+
+      - name: Resolve + validate version (clean-update guard)
+        id: ver
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # applicationId pin + version-field format
+          eval "$(./scripts/check-app-version.sh)"
+          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          # the tag must name this exact versionName, so a release is never mislabelled
+          [ "$TAG" = "v${VERSION_NAME}" ] || { echo "::error::tag '$TAG' != v${VERSION_NAME} (build.gradle.kts versionName). Bump versionName or fix the tag."; exit 1; }
+          # versionCode must exceed the previous release's, or the update won't install
+          git fetch --tags --force >/dev/null 2>&1 || true
+          PREV=$(git tag -l 'v*' --sort=-v:refname | grep -vFx "$TAG" | head -1 || true)
+          if [ -n "$PREV" ]; then
+            PREV_VCODE=$(git show "${PREV}:daemon/shells/android/app/build.gradle.kts" | grep -oE 'versionCode = [0-9]+' | grep -oE '[0-9]+' | head -1)
+            if [ "$VERSION_CODE" -le "$PREV_VCODE" ]; then
+              echo "::error::versionCode ${VERSION_CODE} must be > previous release ${PREV}'s versionCode ${PREV_VCODE}, or Android refuses the in-place update."
+              exit 1
+            fi
+            echo "clean-update OK: versionCode ${VERSION_CODE} > ${PREV} (${PREV_VCODE})"
+          else
+            echo "first release (no previous tag) — versionCode ${VERSION_CODE}"
+          fi
+          echo "version_name=${VERSION_NAME}" >> "$GITHUB_OUTPUT"
+          echo "version_code=${VERSION_CODE}" >> "$GITHUB_OUTPUT"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - name: Install NDK
+        run: sdkmanager "ndk;26.1.10909125"
+
+      - name: Build gomobile .aar
+        working-directory: daemon
+        env:
+          ANDROID_NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/26.1.10909125
+        run: make android
+
+      - name: Assemble APK (release-signed if keystore secrets are set, else debug preview)
+        id: apk
+        working-directory: daemon/shells/android
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          VERSION_NAME: ${{ steps.ver.outputs.version_name }}
+        run: |
+          set -euo pipefail
+          if [ -n "${KEYSTORE_B64:-}" ]; then
+            echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
+            ./gradlew --no-daemon assembleRelease \
+              -PRELEASE_STORE_FILE="$RUNNER_TEMP/release.jks" \
+              -PRELEASE_STORE_PASSWORD="$KEYSTORE_PASSWORD" \
+              -PRELEASE_KEY_ALIAS="$KEY_ALIAS" \
+              -PRELEASE_KEY_PASSWORD="$KEY_PASSWORD"
+            SRC=app/build/outputs/apk/release/app-release.apk
+            echo "signing=release-signed" >> "$GITHUB_OUTPUT"
+          else
+            ./gradlew --no-daemon assembleDebug
+            SRC=app/build/outputs/apk/debug/app-debug.apk
+            echo "signing=debug-signed **preview** (set ANDROID_KEYSTORE_* secrets for a release-signed APK)" >> "$GITHUB_OUTPUT"
+          fi
+          OUT="$RUNNER_TEMP/auto-login-${VERSION_NAME}.apk"
+          cp "$SRC" "$OUT"
+          echo "path=$OUT" >> "$GITHUB_OUTPUT"
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.ver.outputs.tag }}"
+          NOTES="**Auto-Login ${{ steps.ver.outputs.version_name }}** (versionCode ${{ steps.ver.outputs.version_code }})
+
+          Android APK: ${{ steps.apk.outputs.signing }}.
+
+          **Install:** download the \`.apk\` below and open it on your Android device. You will
+          need to allow installs from your browser/Files once (Settings prompt). See the
+          repo README's *Install warnings* section for what each on-device warning means.
+          "
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "${{ steps.apk.outputs.path }}" --clobber
+            gh release edit "$TAG" --title "Auto-Login ${{ steps.ver.outputs.version_name }}" --notes "$NOTES"
+          else
+            gh release create "$TAG" "${{ steps.apk.outputs.path }}" \
+              --title "Auto-Login ${{ steps.ver.outputs.version_name }}" \
+              --notes "$NOTES"
+          fi

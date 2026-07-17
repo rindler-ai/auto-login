@@ -1,11 +1,28 @@
 # Auto-Login
 
+[![Latest release](https://img.shields.io/github/v/release/rindler-ai/auto-login?sort=semver&label=latest)](https://github.com/rindler-ai/auto-login/releases/latest)
+[![CI](https://github.com/rindler-ai/auto-login/actions/workflows/ci.yml/badge.svg)](https://github.com/rindler-ai/auto-login/actions/workflows/ci.yml)
+[![License: LGPL v3](https://img.shields.io/badge/License-LGPL_v3-blue.svg)](./LICENSE)
+
+**Log in to your accounts automatically — without your passwords ever leaving your device.**
+
 Auto-Login is a customer-hosted, on-device credential custody and on-demand relay
-system. Your site passwords, TOTP seeds, and mailbox/OTP tokens live **at rest
-only on your own device** (the OS keychain / keystore). When an automated login
-needs a secret, a semi-trusted hub sends your device a signed request; the device
-verifies it, asks you to approve, and releases **exactly one secret** for that one
-login.
+system. It lets an automated login — say, an AI agent completing a task for you —
+sign in to your accounts while your site passwords, TOTP seeds, and mailbox/OTP
+tokens live **at rest only on your own device** (the OS keychain / keystore). When
+a login needs a secret, a semi-trusted hub sends your device a signed request; the
+device verifies it and releases **exactly one secret** for that one login — sealed
+end-to-end so the hub can never read it, and hands-free (no per-login tap).
+
+## 📲 Install
+
+**[⬇️ Download the latest Android APK from Releases →](https://github.com/rindler-ai/auto-login/releases/latest)**
+
+Open the downloaded `.apk` on your Android device to install (you grant your
+browser/Files app permission to install once). See
+[Install warnings](./daemon/shells/android/README.md#install-warnings--a-release-signed-apk)
+for what each on-device prompt means and how to avoid them. iOS/macOS build from
+source on a Mac with Xcode — see [Build and run](#build-and-run) below.
 
 **Security posture, in two lines:**
 

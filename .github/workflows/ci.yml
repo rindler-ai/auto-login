@@ -123,3 +123,42 @@ jobs:
         run: |
           make ios-app
           make macos-app
+
+  # --- Clean-update gate: an Android update installs over the previous one only ---
+  # if applicationId is unchanged and versionCode strictly increases (and it is
+  # signed with the same key — a release-time/keystore concern). This gate pins
+  # applicationId + version formats, and requires a versionCode bump whenever the
+  # app's Kotlin/manifest source changes, so every shipped change stays updatable.
+  version-gate:
+    name: App version gate (clean updates)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: applicationId pin + version format
+        run: ./scripts/check-app-version.sh
+      - name: Require a versionCode bump when Android source changes
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          # Only meaningful with a base to diff against (pull_request). Skip otherwise.
+          if [ -z "${BASE_SHA:-}" ]; then
+            echo "no PR base ref — skipping the diff-based bump check"; exit 0
+          fi
+          git fetch --no-tags --depth=1 origin "$BASE_SHA" >/dev/null 2>&1 || true
+          GRADLE="daemon/shells/android/app/build.gradle.kts"
+          # Did any APK-affecting source change (Kotlin or the manifest)?
+          CHANGED=$(git diff --name-only "$BASE_SHA"...HEAD -- \
+            'daemon/shells/android/**/*.kt' 'daemon/shells/android/**/AndroidManifest.xml' | wc -l | tr -d ' ')
+          if [ "$CHANGED" = "0" ]; then
+            echo "no Android Kotlin/manifest change — versionCode bump not required"; exit 0
+          fi
+          HEAD_VCODE=$(grep -oE 'versionCode = [0-9]+' "$GRADLE" | grep -oE '[0-9]+' | head -1)
+          BASE_VCODE=$(git show "$BASE_SHA:$GRADLE" 2>/dev/null | grep -oE 'versionCode = [0-9]+' | grep -oE '[0-9]+' | head -1 || echo 0)
+          if [ "$HEAD_VCODE" -le "${BASE_VCODE:-0}" ]; then
+            echo "::error::Android source changed but versionCode ($HEAD_VCODE) did not increase past base (${BASE_VCODE:-0}). Bump versionCode (and versionName) in $GRADLE so the update installs cleanly over the previous build."
+            exit 1
+          fi
+          echo "versionCode bumped $BASE_VCODE -> $HEAD_VCODE — update-clean"
