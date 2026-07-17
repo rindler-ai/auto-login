@@ -162,3 +162,41 @@ jobs:
             exit 1
           fi
           echo "versionCode bumped $BASE_VCODE -> $HEAD_VCODE — update-clean"
+
+  # --- Reminder: refresh the README screenshots when the app UI changes ----------
+  # Advisory-style gate — a red check nudges the author to update docs/screenshots/
+  # (see docs/screenshots/METHODOLOGY.md, demo data only). Satisfy it by updating
+  # the screenshots, or by adding a `Screenshots: <reason>` trailer to a commit when
+  # a UI change has no visible effect.
+  screenshots-current:
+    name: Screenshots up to date (reminder)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Remind to refresh screenshots on UI changes
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          if [ -z "${BASE_SHA:-}" ]; then
+            echo "no PR base ref — the screenshots reminder only runs on pull requests"; exit 0
+          fi
+          git fetch --no-tags --depth=50 origin "$BASE_SHA" >/dev/null 2>&1 || true
+          UI_DIR=daemon/shells/android/app/src/main/java/ai/rindler/autologin/ui
+          UI_CHANGED=$(git diff --name-only "$BASE_SHA"...HEAD -- "$UI_DIR" | wc -l | tr -d ' ')
+          if [ "$UI_CHANGED" = "0" ]; then
+            echo "no change under $UI_DIR — screenshots not affected"; exit 0
+          fi
+          if git log --format='%B' "$BASE_SHA"...HEAD | grep -qiE '^Screenshots:'; then
+            echo "acknowledged via a 'Screenshots:' commit trailer — OK"; exit 0
+          fi
+          SHOTS_CHANGED=$(git diff --name-only "$BASE_SHA"...HEAD -- docs/screenshots/ | wc -l | tr -d ' ')
+          if [ "$SHOTS_CHANGED" != "0" ]; then
+            echo "docs/screenshots/ updated alongside the UI change — OK"; exit 0
+          fi
+          echo "::error::The Android UI ($UI_DIR) changed but docs/screenshots/ was not updated."
+          echo "::error::Refresh the affected screenshots (docs/screenshots/METHODOLOGY.md — demo data only),"
+          echo "::error::or add a 'Screenshots: <reason>' trailer to a commit if this UI change has no visible effect."
+          exit 1
