@@ -8,6 +8,7 @@ replace github.com/rindler-ai/auto-login/core => ../core
 
 require (
 	github.com/coder/websocket v1.8.15
+	github.com/hashicorp/yamux v0.1.2
 	github.com/rindler-ai/auto-login/core v0.0.0-00010101000000-000000000000
 )
 
