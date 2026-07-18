@@ -1,29 +1,58 @@
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp"
     android:height="108dp"
-    android:viewportWidth="108"
-    android:viewportHeight="108">
-    <!-- Shield + keyhole "your key, kept safe", scaled from the 24-unit brand mark
-         to fill the 66dp adaptive safe zone WITHOUT clipping (scale 2.75, centered
-         at 54,54). The keyhole is cut with evenOdd so the black background shows through. -->
-    <!-- 1) Soft drop shadow (offset shield outline) for depth. -->
-    <group android:scaleX="2.75" android:scaleY="2.75" android:translateX="22" android:translateY="23.5">
+    android:viewportWidth="512"
+    android:viewportHeight="512">
+    <!-- "Check-Key": a key whose shaft bends into a checkmark — key (your credential)
+         + check (signed in, automatically), one gesture. Mint-to-white stroke.
+         All ink sits in the 66% adaptive safe zone. (#3958) -->
+    <group android:translateX="2" android:translateY="14">
+        <!-- shaft + checkmark -->
         <path
-            android:fillColor="#33000000"
-            android:pathData="M12,2.2 L5,4.7 C4.6,4.85 4.3,5.2 4.3,5.6 L4.3,11.4 C4.3,16.1 7.6,20.2 11.6,21.8 C11.85,21.9 12.15,21.9 12.4,21.8 C16.4,20.2 19.7,16.1 19.7,11.4 L19.7,5.6 C19.7,5.2 19.4,4.85 19,4.7 L12,2.2 Z" />
-    </group>
-    <!-- 2) The shield face: white with a subtle top-to-bottom sheen + keyhole cut. -->
-    <group android:scaleX="2.75" android:scaleY="2.75" android:translateX="21" android:translateY="21">
+            android:pathData="M148,268 L198,318 L293,225"
+            android:strokeWidth="40"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round">
+            <aapt:attr name="android:strokeColor">
+                <gradient android:type="linear"
+                    android:startX="150" android:startY="310"
+                    android:endX="360" android:endY="150"
+                    android:startColor="#FFFFFF" android:endColor="#5EEAD4" />
+            </aapt:attr>
+        </path>
+        <!-- two key teeth -->
         <path
-            android:fillType="evenOdd"
-            android:pathData="M12,2.2 L5,4.7 C4.6,4.85 4.3,5.2 4.3,5.6 L4.3,11.4 C4.3,16.1 7.6,20.2 11.6,21.8 C11.85,21.9 12.15,21.9 12.4,21.8 C16.4,20.2 19.7,16.1 19.7,11.4 L19.7,5.6 C19.7,5.2 19.4,4.85 19,4.7 L12,2.2 Z M13.7,9.6 C13.7,10.35 13.28,11 12.66,11.34 L13,14.6 C13.02,14.86 12.82,15.08 12.55,15.08 L11.45,15.08 C11.18,15.08 10.98,14.86 11,14.6 L11.34,11.34 C10.72,11 10.3,10.35 10.3,9.6 C10.3,8.66 11.06,7.9 12,7.9 C12.94,7.9 13.7,8.66 13.7,9.6 Z">
-            <aapt:attr xmlns:aapt="http://schemas.android.com/aapt" name="android:fillColor">
-                <gradient
-                    android:type="linear"
-                    android:startX="12" android:startY="2.2"
-                    android:endX="12" android:endY="21.9"
-                    android:startColor="#FFFFFF"
-                    android:endColor="#E8E8E8" />
+            android:pathData="M238,279 L262,303"
+            android:strokeWidth="26"
+            android:strokeLineCap="round">
+            <aapt:attr name="android:strokeColor">
+                <gradient android:type="linear"
+                    android:startX="150" android:startY="310"
+                    android:endX="360" android:endY="150"
+                    android:startColor="#FFFFFF" android:endColor="#5EEAD4" />
+            </aapt:attr>
+        </path>
+        <path
+            android:pathData="M264,253 L288,277"
+            android:strokeWidth="26"
+            android:strokeLineCap="round">
+            <aapt:attr name="android:strokeColor">
+                <gradient android:type="linear"
+                    android:startX="150" android:startY="310"
+                    android:endX="360" android:endY="150"
+                    android:startColor="#FFFFFF" android:endColor="#5EEAD4" />
+            </aapt:attr>
+        </path>
+        <!-- bow ring -->
+        <path
+            android:pathData="M298,186 a34,34 0 1,0 68,0 a34,34 0 1,0 -68,0 Z"
+            android:strokeWidth="26">
+            <aapt:attr name="android:strokeColor">
+                <gradient android:type="linear"
+                    android:startX="150" android:startY="310"
+                    android:endX="360" android:endY="150"
+                    android:startColor="#FFFFFF" android:endColor="#5EEAD4" />
             </aapt:attr>
         </path>
     </group>
