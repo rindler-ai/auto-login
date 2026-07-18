@@ -12,6 +12,7 @@
 package ai.rindler.autologin
 
 import ai.rindler.autologin.sms.SmsCodeExpectationSink
+import ai.rindler.mobile.EgressSession
 import ai.rindler.mobile.Mobile
 import ai.rindler.mobile.Session
 import android.app.NotificationChannel
@@ -28,12 +29,14 @@ import androidx.core.app.NotificationCompat
 class RelayService : Service() {
 
     private var session: Session? = null
+    private var egress: EgressSession? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         startAsForeground()
         if (session == null) startRelay()
+        reconcileEgress()
         // Reflect whether the relay ACTUALLY started: startRelay leaves session null
         // when the device isn't paired (stopSelf) or Mobile.start throws. Setting this
         // unconditionally would make Home show "Active" while nothing is relaying.
@@ -74,6 +77,42 @@ class RelayService : Service() {
         }
     }
 
+    // Device-egress proxy: run the tunnel egress iff the toggle is ON and a token
+    // is linked. Reconciled on every onStartCommand, so toggling (which calls
+    // ensureRunning) starts/stops egress WITHOUT disturbing the hub relay. isEgressActive
+    // reflects the live state for Home. Errors leave egress null (Home shows off).
+    private fun reconcileEgress() {
+        val store = KeystoreSecretSource(applicationContext)
+        // A session that stopped on a PERMANENT rejection (token revoked/rotated, or an
+        // app update required) never reconnects on its own. Tear it down and unlink the
+        // token so the UI shows a truthful OFF and the next enable re-mints, instead of a
+        // phantom "on" over a dead tunnel. unlinkEgress also clears the enabled flag.
+        if (egress?.terminated() == true) {
+            egress?.stop()
+            egress = null
+            store.unlinkEgress()
+        }
+        val creds = store.egressCredentials()
+        val shouldRun = store.isEgressEnabled() && creds != null
+        when {
+            shouldRun && egress == null -> {
+                egress = try {
+                    Mobile.startEgress(creds!!.gateway, creds.token, Build.MODEL ?: "device")
+                } catch (e: Exception) {
+                    null
+                }
+            }
+            !shouldRun && egress != null -> {
+                egress?.stop()
+                egress = null
+            }
+        }
+        // isEgressActive means "a session object exists"; egressConnected() reads the
+        // go-core's LIVE handshake state so the UI can show a truthful on/connecting.
+        liveEgress = egress
+        isEgressActive = egress != null
+    }
+
     private fun startAsForeground() {
         val mgr = getSystemService(NotificationManager::class.java)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -106,7 +145,11 @@ class RelayService : Service() {
     override fun onDestroy() {
         session?.stop()
         session = null
+        egress?.stop()
+        egress = null
+        liveEgress = null
         isRunning = false
+        isEgressActive = false
         super.onDestroy()
     }
 
@@ -118,6 +161,25 @@ class RelayService : Service() {
         @Volatile
         var isRunning: Boolean = false
             private set
+
+        /** Whether the device-egress tunnel is live (drives the egress status). */
+        @Volatile
+        var isEgressActive: Boolean = false
+            private set
+
+        // The live egress session, so the UI can poll its true handshake state.
+        @Volatile
+        private var liveEgress: EgressSession? = null
+
+        /** Whether the device egress tunnel is actually CONNECTED right now (the
+         *  gateway handshake succeeded), not merely started. Drives a truthful
+         *  Settings status. false when connecting, reconnecting, or off. */
+        fun egressConnected(): Boolean = liveEgress?.connected() ?: false
+
+        /** Whether the egress tunnel stopped on a PERMANENT rejection (token
+         *  revoked/rotated, or an app update required) and will not reconnect on its
+         *  own. The UI uses this to drop a phantom "on" and prompt a re-enable. */
+        fun egressTerminated(): Boolean = liveEgress?.terminated() ?: false
 
         /**
          * Start the relay if the device is paired AND holds the server's ping-signing

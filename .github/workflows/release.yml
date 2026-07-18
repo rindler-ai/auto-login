@@ -75,7 +75,9 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-      - uses: android-actions/setup-android@v3
+      # Third-party action pinned to a full commit SHA: this job holds the release
+      # signing keystore, so a hijacked floating @v3 tag must not be able to run here.
+      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
       - name: Install NDK
         run: sdkmanager "ndk;26.1.10909125"
 

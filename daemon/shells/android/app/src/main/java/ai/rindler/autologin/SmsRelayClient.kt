@@ -3,9 +3,9 @@
 //
 // Two callers converge here on the EXACT same endpoint and rendezvous:
 //   - the manual-entry screen (ManualCodeScreen): the user types the code, and
-//   - the SMS auto-read path (sms/OtpDelivery), fed by a text the user allowed via
-//     Android's SMS User Consent prompt: it extracts the code ON DEVICE first, so only
-//     the code — never the message body — is ever sent.
+//   - the SMS auto-read path (sms/OtpDelivery), fed by an incoming text the user
+//     opted into (RECEIVE_SMS): it extracts the code ON DEVICE first, so only the
+//     code — never the message body — is ever sent.
 // From the paused login's perspective there is no difference between the two.
 //
 // Device-bearer authed (Authorization: Bearer <deviceToken from pairing>): the

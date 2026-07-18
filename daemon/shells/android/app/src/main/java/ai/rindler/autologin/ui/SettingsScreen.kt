@@ -3,6 +3,8 @@ package ai.rindler.autologin.ui
 import ai.rindler.autologin.BuildConfig
 import ai.rindler.autologin.KeystoreSecretSource
 import ai.rindler.autologin.RelayService
+import ai.rindler.autologin.disableEgress
+import ai.rindler.autologin.mintEgress
 import ai.rindler.autologin.sms.SmsAutoRead
 import android.Manifest
 import android.content.Intent
@@ -27,6 +29,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowForward
 import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material.icons.rounded.PrivacyTip
+import androidx.compose.material.icons.rounded.Public
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Sms
 import androidx.compose.material.icons.rounded.Smartphone
@@ -38,14 +41,18 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 /**
  * The app-specific privacy policy. Google Play requires this URL in the Data safety
@@ -87,6 +94,9 @@ fun SettingsScreen(
         Spacer(Modifier.height(20.dp))
 
         SmsAutoReadSection(store)
+        Spacer(Modifier.height(20.dp))
+
+        EgressSection(store)
         Spacer(Modifier.height(20.dp))
 
         Text(
@@ -256,6 +266,168 @@ private fun SmsAutoReadSection(store: KeystoreSecretSource) {
         color = cs.onSurfaceVariant,
         modifier = Modifier.padding(horizontal = 4.dp),
     )
+}
+
+/**
+ * The opt-in for using this device as the hub's egress connection. OFF by default.
+ * When ON, the paired device runs a tunnel egress so the user's OWN agent sessions exit
+ * through THIS device's IP (RelayService.reconcileEgress -> Mobile.startEgress).
+ *
+ * Turning ON is a two-step consent: a confirm dialog spells out the ISP-terms tradeoff
+ * FIRST, and only on confirm does the app mint a per-user egress token (mintEgress), store
+ * it, and kick the relay to start the tunnel. Turning OFF unlinks locally (reconciles the
+ * tunnel down at once) and best-effort revokes the token server-side (disableEgress).
+ * `active` is the persisted opt-in; a mint failure snaps it back off with an error.
+ */
+@Composable
+private fun EgressSection(store: KeystoreSecretSource) {
+    val ctx = LocalContext.current
+    val cs = MaterialTheme.colorScheme
+    val scope = rememberCoroutineScope()
+    // Egress mint/revoke hit the SAME hub the device paired against (stored at pairing
+    // time), falling back to the build-time default when unset.
+    val hub = store.hubUrl() ?: BuildConfig.HUB_URL
+    var active by remember { mutableStateOf(store.isEgressEnabled()) }
+    var confirming by remember { mutableStateOf(false) }
+    var failed by remember { mutableStateOf(false) }
+    // The switch is the opt-in; `connected` is the go-core's LIVE handshake state, polled
+    // so the status is truthful (mint can succeed while the tunnel never comes up — an
+    // unreachable gateway or a handshake failure). Without this, the toggle read "On" even
+    // when nothing was relaying.
+    var connected by remember { mutableStateOf(RelayService.egressConnected()) }
+    LaunchedEffect(active) {
+        while (active) {
+            // A permanent rejection (token revoked/rotated) means the tunnel will never
+            // reconnect. Reflect a truthful OFF, drop the local link, and reconcile the
+            // dead session away so the switch and status stop showing a phantom "on".
+            if (RelayService.egressTerminated()) {
+                store.unlinkEgress()
+                RelayService.ensureRunning(ctx)
+                active = false
+                failed = true
+                break
+            }
+            connected = RelayService.egressConnected()
+            delay(2000)
+        }
+        connected = false
+    }
+
+    fun turnOff() {
+        val token = store.deviceToken()
+        store.unlinkEgress()
+        active = false
+        failed = false
+        RelayService.ensureRunning(ctx) // reconciles egress OFF (token now gone)
+        // Best-effort server-side revoke so the minted token stops working; the local
+        // unlink already dropped the tunnel, so a failed revoke is only a cleanup miss.
+        if (token != null) {
+            scope.launch { disableEgress(hub, token) }
+        }
+    }
+
+    // Only runs after the user confirms the consent dialog: mint a token, and on success
+    // link it + start the tunnel. On any failure, leave the switch off with an error.
+    fun confirmOn() {
+        confirming = false
+        failed = false
+        scope.launch {
+            val mint = mintEgress(hub, store.deviceToken() ?: "", Build.MODEL ?: "device")
+            if (mint != null) {
+                store.linkEgress(mint.token, mint.gateway)
+                RelayService.ensureRunning(ctx) // reconciles egress ON
+                active = true
+            } else {
+                active = false
+                failed = true
+            }
+        }
+    }
+
+    fun setEnabled(on: Boolean) {
+        if (!on) {
+            turnOff()
+            return
+        }
+        // Turning ON always shows the consent dialog FIRST; nothing is minted until confirm.
+        failed = false
+        confirming = true
+    }
+
+    Text(
+        "DEVICE CONNECTION",
+        style = MaterialTheme.typography.labelSmall,
+        color = cs.onSurfaceVariant,
+        modifier = Modifier.padding(start = 4.dp, bottom = 8.dp),
+    )
+    AppCard {
+        Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+            IconChip(Icons.Rounded.Public)
+            Spacer(Modifier.size(14.dp))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    "Use my device as the hub's connection",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = cs.onSurface,
+                )
+                Text(
+                    "Route your agent's web traffic through this device's internet, so sites see your IP.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = cs.onSurfaceVariant,
+                )
+            }
+            Spacer(Modifier.size(12.dp))
+            Switch(checked = active, onCheckedChange = { setEnabled(it) })
+        }
+    }
+    Spacer(Modifier.height(10.dp))
+    Text(
+        when {
+            connected -> "On — sites you automate see this device's IP."
+            active -> "Turning on… if this stays, check your connection."
+            else -> "Off"
+        },
+        style = MaterialTheme.typography.labelMedium,
+        color = cs.onSurfaceVariant,
+        modifier = Modifier.padding(horizontal = 4.dp),
+    )
+    if (failed) {
+        Spacer(Modifier.height(6.dp))
+        Text(
+            "Couldn't turn this on. Try again.",
+            style = MaterialTheme.typography.labelMedium,
+            color = cs.error,
+            modifier = Modifier.padding(horizontal = 4.dp),
+        )
+    }
+
+    if (confirming) {
+        AlertDialog(
+            // Cancelling (dismiss or the Cancel button) reverts the switch to off: `active`
+            // was never set true, so simply closing the dialog leaves it off.
+            onDismissRequest = { confirming = false },
+            shape = MaterialTheme.shapes.large,
+            title = { Text("Use this device's connection?") },
+            text = {
+                // DRAFT consent copy, verbatim, pending legal review.
+                Text(
+                    "When on, Auto-Login routes your AI agent's web traffic through this device and its " +
+                        "internet connection. Sites you automate will see THIS device's IP address, not " +
+                        "the hub's. Many residential ISPs prohibit running a \"server,\" \"proxy,\" or " +
+                        "\"commercial\" traffic on consumer plans (e.g. Comcast Xfinity, Verizon Fios, " +
+                        "T-Mobile Home Internet), which can lead to service suspension. You are responsible " +
+                        "for compliance with your ISP's terms. Only your own agent sessions use this " +
+                        "connection. You can turn this off anytime.",
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { confirmOn() }) { Text("Turn on") }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirming = false }) { Text("Cancel") }
+            },
+        )
+    }
 }
 
 @Composable
