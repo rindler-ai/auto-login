@@ -12,8 +12,8 @@ android {
         applicationId = "ai.rindler.autologin"
         minSdk = 26
         targetSdk = 34
-        versionCode = 4
-        versionName = "0.1.3"
+        versionCode = 5
+        versionName = "0.1.4"
 
         // Backend URLs are build params. The DEFAULTS here are PROD (a plain
         // release APK ships against prod); the `debug` build type below points at
@@ -33,6 +33,13 @@ android {
         val privacy = (project.findProperty("privacyPolicyUrl") as String?)
             ?: "https://your-hub.example/privacy"
         buildConfigField("String", "PRIVACY_POLICY_URL", "\"$privacy\"")
+        // The web origin hosting /devices/authorize — the sign-in enrollment page the
+        // app opens so a user pairs by signing in, not by typing a code. A self-host /
+        // open-source build ships a placeholder; a branded build overrides it via
+        // -PauthorizeUrl (or the debug default below).
+        val authorize = (project.findProperty("authorizeUrl") as String?)
+            ?: "https://your-hub.example"
+        buildConfigField("String", "AUTHORIZE_URL", "\"$authorize\"")
     }
 
     buildFeatures {
@@ -88,6 +95,9 @@ android {
             val privacy = (project.findProperty("privacyPolicyUrl") as String?)
                 ?: "https://your-hub.example/privacy"
             buildConfigField("String", "PRIVACY_POLICY_URL", "\"$privacy\"")
+            val authorize = (project.findProperty("authorizeUrl") as String?)
+                ?: "https://your-hub.example"
+            buildConfigField("String", "AUTHORIZE_URL", "\"$authorize\"")
         }
         release {
             // Sign with the release keystore when one is supplied (see signingConfigs
@@ -126,6 +136,11 @@ dependencies {
     // toggle can never claim "On" after Android auto-revokes the permission from an
     // unused daemon (or the user revokes it in system Settings).
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
+
+    // Chrome Custom Tabs for sign-in enrollment: open the hub's /devices/authorize
+    // page in a trusted in-app browser tab so the user signs in with their account and
+    // the device auto-pairs (no code to copy).
+    implementation("androidx.browser:browser:1.8.0")
 
     // SMS auto-read needs no third-party lib: RECEIVE_SMS (granted at the Settings
     // toggle) + a manifest SMS_RECEIVED receiver (sms/SmsReceiver) read incoming

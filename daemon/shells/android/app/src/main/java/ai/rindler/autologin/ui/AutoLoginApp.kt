@@ -1,5 +1,6 @@
 package ai.rindler.autologin.ui
 
+import ai.rindler.autologin.BuildConfig
 import ai.rindler.autologin.KeystoreSecretSource
 import ai.rindler.autologin.RelayService
 import androidx.activity.compose.BackHandler
@@ -13,24 +14,38 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
 
-private enum class Dest { Onboarding, Pair, Home, Enroll, Settings, ManualCode }
+private enum class Dest { Onboarding, Pair, Completing, Home, Enroll, Settings, ManualCode }
 
 @Composable
-fun AutoLoginApp(store: KeystoreSecretSource) {
+fun AutoLoginApp(
+    store: KeystoreSecretSource,
+    pendingEnroll: EnrollRequest? = null,
+    onEnrollConsumed: () -> Unit = {},
+) {
     val ctx = LocalContext.current
     var dest by remember {
         mutableStateOf(
@@ -46,10 +61,32 @@ fun AutoLoginApp(store: KeystoreSecretSource) {
     var forward by remember { mutableStateOf(true) }
     fun go(next: Dest, isForward: Boolean = true) { forward = isForward; dest = next }
 
+    // Sign-in enrollment: an autologin://paired deep link arrives via MainActivity as
+    // `pendingEnroll`. Complete pairing with the token against the hub the link named
+    // (or, if it omitted one, the hub already stored / the compiled-in default), then
+    // land on Home; on failure show the error on the Completing screen with a retry.
+    var enrollError by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(pendingEnroll) {
+        val req = pendingEnroll ?: return@LaunchedEffect
+        enrollError = null
+        if (!store.isOnboarded()) store.setOnboarded()
+        go(Dest.Completing)
+        val hub = req.hub ?: store.hubUrl() ?: BuildConfig.HUB_URL
+        val result = completeEnroll(store, req.token, hub)
+        onEnrollConsumed()
+        result.fold(
+            onSuccess = {
+                RelayService.ensureRunning(ctx)
+                go(Dest.Home)
+            },
+            onFailure = { enrollError = friendlyPairError(it.message) },
+        )
+    }
+
     // Hardware / gesture back navigates one screen up. Enroll and Settings return to
     // Home; a re-pair (device already paired) returns to Home too. On the roots
-    // (Home, initial Pair) and Onboarding — which handles its own slide-back — the
-    // handler is disabled so the system default (exit) applies.
+    // (Home, initial Pair), Onboarding (handles its own slide-back), and Completing
+    // (an uninterruptible step) the handler is disabled so the system default applies.
     val backTarget: Dest? = when (dest) {
         Dest.Enroll, Dest.Settings, Dest.ManualCode -> Dest.Home
         Dest.Pair -> if (store.deviceToken() != null) Dest.Home else null
@@ -84,6 +121,10 @@ fun AutoLoginApp(store: KeystoreSecretSource) {
                     RelayService.ensureRunning(ctx)
                     go(Dest.Home)
                 })
+                Dest.Completing -> CompletingScreen(
+                    error = enrollError,
+                    onRetry = { enrollError = null; go(Dest.Pair, isForward = false) },
+                )
                 Dest.Home -> HomeScreen(
                     store = store,
                     onAddLogin = { go(Dest.Enroll) },
@@ -101,5 +142,38 @@ fun AutoLoginApp(store: KeystoreSecretSource) {
             }
         }
       }
+    }
+}
+
+// Shown while a sign-in enrollment finishes pairing (or, on failure, with a retry).
+@Composable
+private fun CompletingScreen(error: String?, onRetry: () -> Unit) {
+    val cs = MaterialTheme.colorScheme
+    Column(
+        Modifier.fillMaxSize().padding(horizontal = 28.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Spacer(Modifier.weight(1f))
+        if (error == null) {
+            CircularProgressIndicator(color = cs.primary)
+            Spacer(Modifier.height(24.dp))
+            Text(
+                "Signing you in and setting up this device…",
+                style = MaterialTheme.typography.bodyLarge,
+                color = cs.onBackground,
+                textAlign = TextAlign.Center,
+            )
+        } else {
+            Text(
+                error,
+                style = MaterialTheme.typography.bodyLarge,
+                color = cs.error,
+                textAlign = TextAlign.Center,
+            )
+            Spacer(Modifier.height(24.dp))
+            PrimaryButton(text = "Back to setup", onClick = onRetry)
+        }
+        Spacer(Modifier.weight(1f))
+        TrustFooter()
     }
 }

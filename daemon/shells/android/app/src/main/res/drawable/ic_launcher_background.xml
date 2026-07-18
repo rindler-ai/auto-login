@@ -1,28 +1,30 @@
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- Monochrome base: near-black diagonal gradient for a subtle sense of depth
-         without any hue. Reads as a clean black-and-white mark on any launcher. -->
+    <!-- "Check-Key" icon (#3958): deep ink navy so the mint mark reads premium and
+         stands apart from the sea of green/blue shield apps, while the mint ties
+         back to the Rindler emerald. -->
     <path android:pathData="M0,0 h108 v108 h-108 z">
-        <aapt:attr xmlns:aapt="http://schemas.android.com/aapt" name="android:fillColor">
+        <aapt:attr name="android:fillColor">
             <gradient
                 android:type="linear"
-                android:startX="10" android:startY="4"
-                android:endX="98" android:endY="104"
-                android:startColor="#1C1C1C"
-                android:endColor="#000000" />
+                android:startX="0" android:startY="0"
+                android:endX="108" android:endY="108"
+                android:startColor="#101C33"
+                android:endColor="#0A1222" />
         </aapt:attr>
     </path>
-    <!-- Soft top-left glow for depth (subtle white, no hue). -->
+    <!-- Soft top-left glow. -->
     <path android:pathData="M0,0 h108 v108 h-108 z">
-        <aapt:attr xmlns:aapt="http://schemas.android.com/aapt" name="android:fillColor">
+        <aapt:attr name="android:fillColor">
             <gradient
                 android:type="radial"
-                android:centerX="36" android:centerY="30"
-                android:gradientRadius="84"
-                android:startColor="#22FFFFFF"
+                android:centerX="38" android:centerY="30"
+                android:gradientRadius="90"
+                android:startColor="#14FFFFFF"
                 android:endColor="#00FFFFFF" />
         </aapt:attr>
     </path>
