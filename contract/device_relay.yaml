@@ -94,10 +94,9 @@ messages:
       sealed_secret: bytes     # HPKE ciphertext (base64); opens ONLY in the worker
       device_signature: bytes  # Ed25519 sig over release_signing_message; see signing below
 
-# Canonical signing encodings. Both implementations -- packages/custody-app/relay
-# (client) and the server's device-relay package (server) -- are deliberately SEPARATE
-# implementations and MUST produce these bytes identically; the golden-vector test is
-# what proves they agree.
+# Canonical signing encodings. The client and the server are deliberately SEPARATE
+# implementations of this contract and MUST produce these bytes identically; the
+# golden-vector test is what proves they agree.
 #
 # Fields are LENGTH-PREFIXED, not separator-joined. A 0x1f-joined encoding is
 # ambiguous over variable-length binary fields, and the attacker in this threat model

@@ -4,15 +4,18 @@
 [![CI](https://github.com/rindler-ai/auto-login/actions/workflows/ci.yml/badge.svg)](https://github.com/rindler-ai/auto-login/actions/workflows/ci.yml)
 [![License: LGPL v3](https://img.shields.io/badge/License-LGPL_v3-blue.svg)](./LICENSE)
 
-**Log in to your accounts automatically — without your passwords ever leaving your device.**
+**Sign in to your accounts automatically, without your passwords ever leaving your phone.**
 
-Auto-Login is a customer-hosted, on-device credential custody and on-demand relay
-system. It lets an automated login — say, an AI agent completing a task for you —
-sign in to your accounts while your site passwords, TOTP seeds, and mailbox/OTP
-tokens live **at rest only on your own device** (the OS keychain / keystore). When
-a login needs a secret, a semi-trusted hub sends your device a signed request; the
-device verifies it and releases **exactly one secret** for that one login — sealed
-end-to-end so the hub can never read it, and hands-free (no per-login tap).
+Auto-Login turns your phone into a private vault for your logins. Your passwords,
+two-factor codes, and email or text sign-in codes are saved only on your own device,
+locked by its hardware security. When something you trust needs to sign in for you
+(for example, an AI assistant doing a task on your behalf), your phone hands over just
+the one thing that sign-in needs, sealed so nobody in between can read it, and then
+forgets it. You set it up once, and it works hands-free after that.
+
+You can also let a sign-in use **your phone's own internet connection**, so the site
+sees your normal home address instead of a data center. It stays off until you turn it
+on with a single switch.
 
 ## 📲 Install
 

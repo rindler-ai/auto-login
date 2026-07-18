@@ -55,6 +55,14 @@ class KeystoreSecretSource(context: Context) : SecretSource {
         const val K_ONBOARDED = "rindler-meta:onboarded"    // has the intro been seen
         const val K_SMS_AUTOREAD = "rindler-meta:sms-autoread" // user opted into auto-reading 2FA texts
         const val K_HUB_URL = "rindler-meta:hub-url"        // the hub this device pairs + connects to
+
+        // Device-egress proxy opt-in + the durable egress token. When ON, the paired
+        // device runs a tunnel egress so the user's OWN agent sessions exit through THIS
+        // device's IP. The token is a per-user tunnel token minted server-side; the
+        // gateway is the tunnel wss:// endpoint. clear()/reset() wipes it.
+        const val K_EGRESS_ENABLED = "rindler-meta:egress-enabled"
+        const val K_EGRESS_TOKEN = "rindler-meta:egress-token"     // rt_live_ per-user tunnel token
+        const val K_EGRESS_GATEWAY = "rindler-meta:egress-gateway" // wss:// tunnel gateway URL
     }
 
     // --- hub URL (which hub this device pairs + connects to) ---
@@ -81,6 +89,46 @@ class KeystoreSecretSource(context: Context) : SecretSource {
 
     fun setSmsAutoReadEnabled(on: Boolean) {
         prefs.edit().putBoolean(K_SMS_AUTOREAD, on).apply()
+    }
+
+    // --- Device-egress proxy opt-in + tunnel token ---
+
+    /// Whether the user turned ON "use my device as the hub's connection". Default OFF;
+    /// the egress tunnel runs only when this is on AND a token is linked (RelayService).
+    fun isEgressEnabled(): Boolean = prefs.getBoolean(K_EGRESS_ENABLED, false)
+
+    fun setEgressEnabled(on: Boolean) {
+        prefs.edit().putBoolean(K_EGRESS_ENABLED, on).apply()
+    }
+
+    /// True once an egress token + gateway are stored (independent of the enabled flag).
+    fun isEgressLinked(): Boolean = egressCredentials() != null
+
+    /// The durable egress token + tunnel gateway, or null if not linked. The token never
+    /// authorizes anything but this user's own egress; the device only carries opaque TCP.
+    fun egressCredentials(): EgressCredentials? {
+        val token = prefs.getString(K_EGRESS_TOKEN, null)?.takeIf { it.isNotBlank() } ?: return null
+        val gateway = prefs.getString(K_EGRESS_GATEWAY, null)?.takeIf { it.isNotBlank() } ?: return null
+        return EgressCredentials(token, gateway)
+    }
+
+    /// Persist the minted egress token + gateway and turn the toggle ON (one commit).
+    fun linkEgress(token: String, gateway: String) {
+        prefs.edit()
+            .putString(K_EGRESS_TOKEN, token)
+            .putString(K_EGRESS_GATEWAY, gateway)
+            .putBoolean(K_EGRESS_ENABLED, true)
+            .apply()
+    }
+
+    /// Forget the egress token and turn the toggle off. The caller should ALSO revoke the
+    /// server daemon (POST /devices/egress/disable) so the token stops working.
+    fun unlinkEgress() {
+        prefs.edit()
+            .remove(K_EGRESS_TOKEN)
+            .remove(K_EGRESS_GATEWAY)
+            .putBoolean(K_EGRESS_ENABLED, false)
+            .apply()
     }
 
     // --- onboarding / reset (drive the first-run intro) ---
@@ -166,3 +214,10 @@ class KeystoreSecretSource(context: Context) : SecretSource {
         }.getOrDefault(emptyList())
     }
 }
+
+/** The durable device-egress token + tunnel gateway. Held only in
+ *  EncryptedSharedPreferences; authorizes only this user's own egress. */
+data class EgressCredentials(
+    val token: String,
+    val gateway: String,
+)

@@ -6,10 +6,10 @@ The device hub pings it for one in-flight login, releases **exactly one
 secret** — HPKE-sealed end-to-end to the login worker — after an explicit
 per-secret user approval.
 
-This module is the **testable client core** (issue). The desktop daemon
-main loop (outbound `wss` to the hub, mirroring `packages/tunnel-daemon`) and the
-OS-native keychain backings (macOS Keychain, Windows Credential Manager, Linux
-libsecret) land in follow-ups; here the store is an in-memory backing.
+This module is the **testable client core**. The desktop daemon main loop
+(outbound `wss` to the hub) and the OS-native keychain backings (macOS Keychain,
+Windows Credential Manager, Linux libsecret) land in follow-ups; here the store is
+an in-memory backing.
 
 ## Packages
 
