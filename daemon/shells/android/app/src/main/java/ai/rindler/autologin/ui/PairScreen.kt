@@ -39,6 +39,12 @@ import kotlinx.coroutines.withContext
 
 @Composable
 fun PairScreen(store: KeystoreSecretSource, onPaired: () -> Unit) {
+    // A branded build ships a real BuildConfig.HUB_URL, so the field is prefilled and
+    // usually left as-is. A self-host / open-source build ships a placeholder, so the
+    // field starts empty and the user pastes their own hub's URL. A previously-stored
+    // value always wins so a re-pair reconnects to the same hub.
+    val defaultHub = remember { BuildConfig.HUB_URL.takeUnless { it.contains("your-hub.example") } ?: "" }
+    var hub by remember { mutableStateOf(store.hubUrl() ?: defaultHub) }
     var code by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -62,12 +68,19 @@ fun PairScreen(store: KeystoreSecretSource, onPaired: () -> Unit) {
         Text("Pair this device", style = MaterialTheme.typography.headlineMedium, color = cs.onBackground)
         Spacer(Modifier.height(12.dp))
         Text(
-            "In your hub's console, open Settings → Devices, tap Add device, and enter the code shown there.",
+            "Enter your hub's address, then the pairing code from its console (Settings → Devices → Add device).",
             style = MaterialTheme.typography.bodyMedium,
             color = cs.onSurfaceVariant,
             textAlign = TextAlign.Center,
         )
         Spacer(Modifier.height(36.dp))
+        AppTextField(
+            value = hub,
+            onValueChange = { hub = it.trim(); error = null },
+            label = "Hub URL (wss://…)",
+            isError = error != null,
+        )
+        Spacer(Modifier.height(14.dp))
         AppTextField(
             value = code,
             onValueChange = { code = it.trim(); error = null },
@@ -80,31 +93,41 @@ fun PairScreen(store: KeystoreSecretSource, onPaired: () -> Unit) {
         Spacer(Modifier.height(28.dp))
         PrimaryButton(
             text = "Pair",
-            enabled = code.isNotBlank(),
+            enabled = code.isNotBlank() && hub.isNotBlank(),
             loading = busy,
             onClick = {
-                busy = true; error = null
-                scope.launch {
-                    val result = withContext(Dispatchers.IO) {
-                        runCatching {
-                            val keyB64 = Mobile.generateDeviceKey()
-                            val pubB64 = Mobile.devicePublicKey(keyB64)
-                            // pair() returns BOTH the hub bearer token and the server's
-                            // ping-signing public key. Persist both: the Go core verifies
-                            // every SecretPing against that key before sealing a credential
-                            // to the worker, so a device that saved only the token
-                            // declines every login.
-                            val res = Mobile.pair(
-                                pairUrl(BuildConfig.HUB_URL), code, deviceName(), "android", pubB64,
-                            )
-                            store.saveIdentity(res.deviceToken, keyB64, res.serverPubkey)
+                val h = hub.trim()
+                if (!h.startsWith("ws://") && !h.startsWith("wss://")) {
+                    // The relay + secrets ride this channel, so the URL must be a
+                    // WebSocket endpoint; a wrong scheme is the most common paste mistake.
+                    error = "Your hub URL should start with wss:// (or ws://)."
+                } else {
+                    busy = true; error = null
+                    // Persist the hub BEFORE pairing so the relay reconnects to the same
+                    // one; the pair/complete endpoint is derived from it below.
+                    store.setHubUrl(h)
+                    scope.launch {
+                        val result = withContext(Dispatchers.IO) {
+                            runCatching {
+                                val keyB64 = Mobile.generateDeviceKey()
+                                val pubB64 = Mobile.devicePublicKey(keyB64)
+                                // pair() returns BOTH the hub bearer token and the server's
+                                // ping-signing public key. Persist both: the Go core verifies
+                                // every SecretPing against that key before sealing a credential
+                                // to the worker, so a device that saved only the token
+                                // declines every login.
+                                val res = Mobile.pair(
+                                    pairUrl(h), code, deviceName(), "android", pubB64,
+                                )
+                                store.saveIdentity(res.deviceToken, keyB64, res.serverPubkey)
+                            }
                         }
+                        busy = false
+                        result.fold(
+                            onSuccess = { onPaired() },
+                            onFailure = { error = friendlyPairError(it.message) },
+                        )
                     }
-                    busy = false
-                    result.fold(
-                        onSuccess = { onPaired() },
-                        onFailure = { error = friendlyPairError(it.message) },
-                    )
                 }
             },
         )

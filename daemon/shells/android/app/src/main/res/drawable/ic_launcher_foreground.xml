@@ -5,7 +5,7 @@
     android:viewportHeight="108">
     <!-- Shield + keyhole "your key, kept safe", scaled from the 24-unit brand mark
          to fill the 66dp adaptive safe zone WITHOUT clipping (scale 2.75, centered
-         at 54,54). The keyhole is cut with evenOdd so the emerald shows through. -->
+         at 54,54). The keyhole is cut with evenOdd so the black background shows through. -->
     <!-- 1) Soft drop shadow (offset shield outline) for depth. -->
     <group android:scaleX="2.75" android:scaleY="2.75" android:translateX="22" android:translateY="23.5">
         <path
@@ -23,7 +23,7 @@
                     android:startX="12" android:startY="2.2"
                     android:endX="12" android:endY="21.9"
                     android:startColor="#FFFFFF"
-                    android:endColor="#DFF6EC" />
+                    android:endColor="#E8E8E8" />
             </aapt:attr>
         </path>
     </group>

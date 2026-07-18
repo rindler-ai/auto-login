@@ -54,6 +54,21 @@ class KeystoreSecretSource(context: Context) : SecretSource {
         const val K_SITE_INDEX = "rindler-meta:sites"       // JSON array of enrolled sites
         const val K_ONBOARDED = "rindler-meta:onboarded"    // has the intro been seen
         const val K_SMS_AUTOREAD = "rindler-meta:sms-autoread" // user opted into auto-reading 2FA texts
+        const val K_HUB_URL = "rindler-meta:hub-url"        // the hub this device pairs + connects to
+    }
+
+    // --- hub URL (which hub this device pairs + connects to) ---
+
+    /// The hub WebSocket URL the user pointed this device at during pairing, or null
+    /// if never set. A release APK ships with a BuildConfig.HUB_URL default (a real
+    /// hub for a branded build, or a placeholder for a self-host build); the pairing
+    /// screen lets the user override it, and the stored value wins from then on so the
+    /// relay reconnects to the SAME hub that minted the pairing token. Not a secret —
+    /// just a hostname — but kept in the same store so "Reset device" clears it too.
+    fun hubUrl(): String? = prefs.getString(K_HUB_URL, null)?.takeIf { it.isNotBlank() }
+
+    fun setHubUrl(url: String) {
+        prefs.edit().putString(K_HUB_URL, url.trim()).apply()
     }
 
     // --- SMS auto-read opt-in (the user's choice; no OS permission is involved) ---

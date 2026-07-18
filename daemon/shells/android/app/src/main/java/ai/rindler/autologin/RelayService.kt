@@ -58,11 +58,15 @@ class RelayService : Service() {
             stopSelf() // not paired (or paired before this change) — nothing we can relay
             return
         }
+        // Reconnect to the SAME hub the user paired against (stored at pairing time),
+        // falling back to the build-time default when unset (a branded build ships a
+        // real hub; a self-host build ships a placeholder the pairing screen replaces).
+        val hub = store.hubUrl() ?: BuildConfig.HUB_URL
         session = try {
             // The sink arms SmsExpectation from the authenticated sms_otp_code ping, so
             // the SMS reader only ever inspects a text while a login awaits a code.
             Mobile.start(
-                BuildConfig.HUB_URL, token, key, serverPubkey, store,
+                hub, token, key, serverPubkey, store,
                 AutoApprover, SmsCodeExpectationSink(applicationContext),
             )
         } catch (e: Exception) {

@@ -3,25 +3,26 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- Rich emerald base (diagonal). -->
+    <!-- Monochrome base: near-black diagonal gradient for a subtle sense of depth
+         without any hue. Reads as a clean black-and-white mark on any launcher. -->
     <path android:pathData="M0,0 h108 v108 h-108 z">
         <aapt:attr xmlns:aapt="http://schemas.android.com/aapt" name="android:fillColor">
             <gradient
                 android:type="linear"
                 android:startX="10" android:startY="4"
                 android:endX="98" android:endY="104"
-                android:startColor="#16C08B"
-                android:endColor="#06543F" />
+                android:startColor="#1C1C1C"
+                android:endColor="#000000" />
         </aapt:attr>
     </path>
-    <!-- Soft top-left glow for depth. -->
+    <!-- Soft top-left glow for depth (subtle white, no hue). -->
     <path android:pathData="M0,0 h108 v108 h-108 z">
         <aapt:attr xmlns:aapt="http://schemas.android.com/aapt" name="android:fillColor">
             <gradient
                 android:type="radial"
                 android:centerX="36" android:centerY="30"
                 android:gradientRadius="84"
-                android:startColor="#3AFFFFFF"
+                android:startColor="#22FFFFFF"
                 android:endColor="#00FFFFFF" />
         </aapt:attr>
     </path>
