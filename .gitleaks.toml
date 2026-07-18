@@ -12,7 +12,7 @@ useDefault = true
 
 [[rules]]
 id = "rindler-hub-hostname"
-description = "Rindler-operated hub hostname (chat/mcp/agents.rindler.ai) must never be baked in — use a config placeholder"
+description = "Operator hub hostname (any *.rindler.ai subdomain) must never be baked in — use a config placeholder"
 regex = '''(?i)[a-z0-9-]+\.rindler\.ai'''
 tags = ["infra", "hostname"]
 
@@ -64,13 +64,22 @@ description = "Kernel browser-infrastructure reference"
 regex = '''(?i)\bkernel\b'''
 tags = ["infra", "vendor"]
 
+[[rules]]
+id = "clerk-instance-host"
+description = "Operator Clerk instance hostname (*.clerk.accounts.dev) — an internal auth identifier; never bake it in"
+regex = '''(?i)[a-z0-9-]+\.clerk\.accounts\.dev'''
+tags = ["infra", "hostname"]
+
 [allowlist]
 description = "Files that legitimately contain the denied words (legal text, this ruleset, and the CI that enforces it) and known-safe strings"
 paths = [
   '''LICENSE''',
   '''COPYING\.GPL-3''',
   '''\.gitleaks\.toml''',
-  '''\.github/workflows/.*''',
+  # Only the CI guard file legitimately contains the denied words (as grep patterns).
+  # Scoped to ci.yml specifically, NOT all of .github/workflows, so a host pasted into
+  # release.yml or any future workflow is still caught.
+  '''\.github/workflows/ci\.yml''',
 ]
 regexes = [
   '''your-hub\.example''',                 # documented placeholder host

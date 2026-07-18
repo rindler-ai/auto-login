@@ -7,6 +7,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	agent "github.com/rindler-ai/auto-login/daemon/agent"
 	tunnelclient "github.com/rindler-ai/auto-login/daemon/tunnelclient"
 )
 
@@ -24,8 +25,9 @@ import (
 
 // EgressSession is a running device-egress tunnel. Stop() tears it down.
 type EgressSession struct {
-	cancel    context.CancelFunc
-	connected atomic.Bool
+	cancel     context.CancelFunc
+	connected  atomic.Bool
+	terminated atomic.Bool
 }
 
 // Stop ends the egress loop and closes the tunnel. Safe to call more than once.
@@ -43,6 +45,15 @@ func (s *EgressSession) Connected() bool {
 	return s != nil && s.connected.Load()
 }
 
+// Terminated reports whether the egress loop stopped on a PERMANENT rejection
+// (the token was revoked/rotated, or the gateway requires an app update) rather
+// than a transient drop it will retry. The shell polls this so it can reflect a
+// truthful OFF state and prompt a re-mint, instead of showing a phantom "on" for
+// a tunnel that will never reconnect on its own.
+func (s *EgressSession) Terminated() bool {
+	return s != nil && s.terminated.Load()
+}
+
 // StartEgress connects this device to the tunnel gateway and keeps it connected
 // (reconnecting with capped backoff) until Stop(). gatewayURL is the wss:// (or
 // ws:// in tests) gateway; token is the rt_live_ device-egress token minted for
@@ -53,6 +64,12 @@ func (s *EgressSession) Connected() bool {
 func StartEgress(gatewayURL, token, name string) (*EgressSession, error) {
 	if gatewayURL == "" || token == "" {
 		return nil, errors.New("gateway url and token are required")
+	}
+	// The rt_live_ egress token rides the hello frame in the clear, so the gateway
+	// channel MUST be wss:// (ws:// only for a loopback test host) — the same
+	// cleartext-token exposure ValidateHubURL guards against for the relay hub.
+	if err := agent.ValidateHubURL(gatewayURL); err != nil {
+		return nil, err
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	s := &EgressSession{cancel: cancel}
@@ -82,11 +99,20 @@ func (s *EgressSession) runEgressLoop(ctx context.Context, gateway, token, name 
 			return // Stop() was called
 		}
 		if errors.Is(err, tunnelclient.ErrRevoked) || errors.Is(err, tunnelclient.ErrUpgradeRequired) {
-			log.Printf("device-egress: terminal (%v) — stopping; re-mint/update required", err)
+			// Permanent rejection: flag it terminal so the shell can show a truthful
+			// OFF and prompt a re-mint/update instead of a phantom "on".
+			s.terminated.Store(true)
+			log.Printf("device-egress: stopped — re-mint or app update required")
 			return
 		}
-		// A clean return (nil) or a transient error both mean "reconnect".
-		log.Printf("device-egress: disconnected (%v) — retrying in %s", err, backoff)
+		// A clean return (nil) or a transient error both mean "reconnect". NEVER log
+		// err verbatim here: a dial failure embeds the full gateway URL (coder/websocket
+		// wraps the *url.Error), and the gateway host must never reach logcat.
+		if err == nil {
+			log.Printf("device-egress: gateway closed the connection — retrying in %s", backoff)
+		} else {
+			log.Printf("device-egress: connection lost — retrying in %s", backoff)
+		}
 		select {
 		case <-ctx.Done():
 			return

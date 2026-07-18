@@ -297,6 +297,16 @@ private fun EgressSection(store: KeystoreSecretSource) {
     var connected by remember { mutableStateOf(RelayService.egressConnected()) }
     LaunchedEffect(active) {
         while (active) {
+            // A permanent rejection (token revoked/rotated) means the tunnel will never
+            // reconnect. Reflect a truthful OFF, drop the local link, and reconcile the
+            // dead session away so the switch and status stop showing a phantom "on".
+            if (RelayService.egressTerminated()) {
+                store.unlinkEgress()
+                RelayService.ensureRunning(ctx)
+                active = false
+                failed = true
+                break
+            }
             connected = RelayService.egressConnected()
             delay(2000)
         }

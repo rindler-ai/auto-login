@@ -150,9 +150,14 @@ func ExtractOTPCode(body string) string {
 	return code
 }
 
-// GenerateDeviceKey returns a fresh base64 Ed25519 private key. The native side
-// stores it in the Secure Enclave / Keystore and never lets the private half
-// leave the device.
+// GenerateDeviceKey returns a fresh base64 Ed25519 private key for the native
+// shell to persist. NOTE: this is SOFTWARE key material — generated here in Go and
+// handed back as bytes — NOT a hardware-bound, non-exportable Secure Enclave /
+// Android Keystore key. The shell protects it AT REST inside the hardware-backed
+// keychain / EncryptedSharedPreferences (a Keystore master key wraps it), but the
+// private half is decrypted into app memory to sign each release, so exposure
+// requires code execution already inside the app sandbox. Do not describe it as
+// enclave-resident.
 func GenerateDeviceKey() (string, error) {
 	_, priv, err := ed25519.GenerateKey(nil)
 	if err != nil {

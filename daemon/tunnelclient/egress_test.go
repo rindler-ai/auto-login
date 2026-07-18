@@ -61,6 +61,12 @@ func TestIsBlockedIP(t *testing.T) {
 		{"100.128 is public", "100.128.0.1", false},
 		// Limited broadcast — blocked
 		{"limited broadcast", "255.255.255.255", true},
+		// NAT64 (RFC 6052, 64:ff9b::/96) — blocked, incl. embedded metadata/private v4
+		{"nat64 metadata", "64:ff9b::a9fe:a9fe", true}, // ::169.254.169.254
+		{"nat64 rfc1918", "64:ff9b::0a00:0001", true},  // ::10.0.0.1
+		{"nat64 low", "64:ff9b::", true},
+		// 64:ff9b:: boundary — 64:ff9c:: is outside the /96 prefix, so public
+		{"just past nat64 is public", "64:ff9c::1", false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

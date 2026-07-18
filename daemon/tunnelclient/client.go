@@ -121,10 +121,15 @@ func RunOnce(ctx context.Context, opts Options) error {
 		Name:          opts.Name,
 		DaemonVersion: DaemonVersion,
 	})
-	if err := conn.Write(ctx, websocket.MessageText, h); err != nil {
+	// Bound the hello exchange with its own deadline. Without this, a gateway that
+	// completes the WebSocket upgrade but never replies would block conn.Read on the
+	// unbounded ctx forever (ctx only cancels on Stop()), wedging the reconnect loop.
+	hsCtx, hsCancel := context.WithTimeout(ctx, 15*time.Second)
+	defer hsCancel()
+	if err := conn.Write(hsCtx, websocket.MessageText, h); err != nil {
 		return fmt.Errorf("write hello: %w", err)
 	}
-	_, respBytes, err := conn.Read(ctx)
+	_, respBytes, err := conn.Read(hsCtx)
 	if err != nil {
 		return fmt.Errorf("read reply: %w", err)
 	}

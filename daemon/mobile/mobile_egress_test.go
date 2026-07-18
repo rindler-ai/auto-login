@@ -22,6 +22,20 @@ func TestStartEgress_StartsAndStops(t *testing.T) {
 	s.Stop() // idempotent / safe on an already-stopped session
 }
 
+func TestStartEgress_RejectsCleartextGateway(t *testing.T) {
+	// The rt_live_ token rides the hello frame in the clear, so a non-loopback ws://
+	// gateway must be refused (only wss://, or ws:// to a loopback host, is allowed).
+	if _, err := StartEgress("ws://gateway.example/tunnel", "rt_live_test", "dev"); err == nil {
+		t.Error("cleartext ws:// gateway to a remote host should be rejected")
+	}
+	// wss:// is accepted (loopback ws:// is covered by TestStartEgress_StartsAndStops).
+	s, err := StartEgress("wss://gateway.example", "rt_live_test", "dev")
+	if err != nil {
+		t.Fatalf("wss:// gateway should be accepted: %v", err)
+	}
+	s.Stop()
+}
+
 func TestEgressSession_NilStopIsSafe(t *testing.T) {
 	var s *EgressSession
 	s.Stop() // must not panic on a nil receiver

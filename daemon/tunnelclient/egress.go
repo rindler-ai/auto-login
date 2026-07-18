@@ -12,6 +12,13 @@ import (
 // to a 100.64.x.x host could reach carrier-internal infrastructure — refuse it.
 var cgnatRange = mustCIDR("100.64.0.0/10")
 
+// nat64Range is the RFC 6052 well-known NAT64 prefix (64:ff9b::/96). On an
+// IPv6-only carrier (NAT64/DNS64, or on-device CLAT), an address in this range is
+// translated to an embedded IPv4 target — so a gateway-requested CONNECT to
+// 64:ff9b::<v4> would bypass the IPv4 deny-list and reach metadata/private IPv4.
+// Refuse the whole prefix; a device should never egress via carrier NAT64.
+var nat64Range = mustCIDR("64:ff9b::/96")
+
 func mustCIDR(s string) *net.IPNet {
 	_, n, err := net.ParseCIDR(s)
 	if err != nil {
@@ -23,8 +30,10 @@ func mustCIDR(s string) *net.IPNet {
 // isBlockedIP reports whether an IP should be refused as an egress target.
 // Covers loopback, RFC1918, RFC4193 (unique-local v6), link-local (which
 // includes the cloud metadata range 169.254.169.254), unspecified, multicast,
-// RFC 6598 CGNAT (100.64.0.0/10), and the limited broadcast address
-// (255.255.255.255). The check is conservative on purpose: when in doubt, refuse.
+// RFC 6598 CGNAT (100.64.0.0/10), RFC 6052 NAT64 (64:ff9b::/96), and the limited
+// broadcast address (255.255.255.255). IPv4-mapped IPv6 (::ffff:a.b.c.d) is
+// normalized by To4() so mapped private/metadata targets are caught too. The
+// check is conservative on purpose: when in doubt, refuse.
 func isBlockedIP(ip net.IP) bool {
 	if ip == nil {
 		return true
@@ -33,6 +42,9 @@ func isBlockedIP(ip net.IP) bool {
 		return true
 	}
 	if v4 := ip.To4(); v4 != nil && cgnatRange.Contains(v4) {
+		return true
+	}
+	if nat64Range.Contains(ip) { // 64:ff9b::/96 carrier NAT64 → embedded IPv4
 		return true
 	}
 	return ip.IsLoopback() ||

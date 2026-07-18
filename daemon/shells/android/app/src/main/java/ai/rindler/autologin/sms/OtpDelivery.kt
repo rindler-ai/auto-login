@@ -50,14 +50,19 @@ object OtpDelivery {
         val code = Mobile.extractOTPCode(text)
         if (code.isNullOrEmpty()) return
 
-        val token = KeystoreSecretSource(app.applicationContext).deviceToken() ?: return
+        val store = KeystoreSecretSource(app.applicationContext)
+        val token = store.deviceToken() ?: return
+        // Deliver to the hub the device actually PAIRED against (store.hubUrl()), not the
+        // build-time default — the device token and the waiting login only exist on that
+        // hub. Falls back to BuildConfig.HUB_URL only if none was stored (branded build).
+        val hub = store.hubUrl() ?: BuildConfig.HUB_URL
         // Capture the window generation now; the disarm below closes only THIS window, so
         // a second overlapping login that re-armed keeps its own.
         val gen = SmsExpectation.currentGeneration()
         scope.launch {
             // Close the expecting-code window the moment the code lands with a waiting
             // login, so no later text this login triggers is ever inspected (single-shot).
-            if (deliverWithRetry(token, code)) SmsExpectation.disarm(app.applicationContext, gen)
+            if (deliverWithRetry(hub, token, code)) SmsExpectation.disarm(app.applicationContext, gen)
         }
     }
 
@@ -70,11 +75,11 @@ object OtpDelivery {
     // stays within the foreground process's comfortable window.
     // Returns true iff the code reached a waiting login (so the caller can close the
     // expecting-code window); false if the pairing is bad or the window ran out.
-    private suspend fun deliverWithRetry(token: String, code: String): Boolean {
+    private suspend fun deliverWithRetry(hub: String, token: String, code: String): Boolean {
         val backoffs = longArrayOf(0, 3000, 4000, 4000)
         for (waitMs in backoffs) {
             if (waitMs > 0) delay(waitMs)
-            when (submitOtpCode(BuildConfig.HUB_URL, token, code)) {
+            when (submitOtpCode(hub, token, code)) {
                 // Delivered to a waiting login.
                 CodeSubmitResult.DELIVERED -> return true
                 // The pairing is bad and no retry will help.

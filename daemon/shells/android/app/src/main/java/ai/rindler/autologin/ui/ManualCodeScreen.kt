@@ -88,8 +88,11 @@ fun ManualCodeScreen(
             return
         }
         state = SubmitState.Submitting
+        // POST to the hub the device paired against, not the build-time default: the
+        // device token and the paused login live only on that hub.
+        val hub = store.hubUrl() ?: BuildConfig.HUB_URL
         scope.launch {
-            state = when (submitOtpCode(BuildConfig.HUB_URL, token, trimmed)) {
+            state = when (submitOtpCode(hub, token, trimmed)) {
                 CodeSubmitResult.DELIVERED -> SubmitState.Success
                 CodeSubmitResult.NO_PENDING_LOGIN -> SubmitState.NoPendingLogin
                 CodeSubmitResult.UNAUTHORIZED ->

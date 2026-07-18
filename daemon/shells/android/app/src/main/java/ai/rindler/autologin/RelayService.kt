@@ -83,6 +83,15 @@ class RelayService : Service() {
     // reflects the live state for Home. Errors leave egress null (Home shows off).
     private fun reconcileEgress() {
         val store = KeystoreSecretSource(applicationContext)
+        // A session that stopped on a PERMANENT rejection (token revoked/rotated, or an
+        // app update required) never reconnects on its own. Tear it down and unlink the
+        // token so the UI shows a truthful OFF and the next enable re-mints, instead of a
+        // phantom "on" over a dead tunnel. unlinkEgress also clears the enabled flag.
+        if (egress?.terminated() == true) {
+            egress?.stop()
+            egress = null
+            store.unlinkEgress()
+        }
         val creds = store.egressCredentials()
         val shouldRun = store.isEgressEnabled() && creds != null
         when {
@@ -166,6 +175,11 @@ class RelayService : Service() {
          *  gateway handshake succeeded), not merely started. Drives a truthful
          *  Settings status. false when connecting, reconnecting, or off. */
         fun egressConnected(): Boolean = liveEgress?.connected() ?: false
+
+        /** Whether the egress tunnel stopped on a PERMANENT rejection (token
+         *  revoked/rotated, or an app update required) and will not reconnect on its
+         *  own. The UI uses this to drop a phantom "on" and prompt a re-enable. */
+        fun egressTerminated(): Boolean = liveEgress?.terminated() ?: false
 
         /**
          * Start the relay if the device is paired AND holds the server's ping-signing
