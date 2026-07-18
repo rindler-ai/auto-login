@@ -69,18 +69,28 @@ See [`THREAT-MODEL.md`](./THREAT-MODEL.md) for the full trust model,
 
 ## How pairing and relay work
 
-**Pairing (once per device).**
+**Pairing (once per device).** The easy path is **sign-in enrollment**: tap **Sign
+in** on the setup screen. The app opens your hub's `/devices/authorize` page in a
+Custom Tab; you sign in with your hub account, approve the phone, and it enrolls
+itself via an `autologin://paired` deep link carrying a single-use pairing token —
+no code to copy. (Your hub must serve a `/devices/authorize` page that mints the
+token, and the app must be built with `-PauthorizeUrl=https://<your-hub-web-origin>`.)
+
+You can also **enter a code manually** ("Enter a code instead"):
 
 1. Mint a single-use pairing code in your hub's device console
    (`https://your-hub.example/settings/devices`).
-2. Enter or pass the code to the app. The device generates a long-lived Ed25519
-   signing key that stays non-exportable in the OS keychain / secure enclave, and
-   POSTs only its **public** key to `https://your-hub.example/devices/pair/complete`.
+2. Enter the code (and your hub URL) in the app. The device generates a long-lived
+   Ed25519 signing key that stays non-exportable in the OS keychain / secure enclave,
+   and POSTs only its **public** key to `https://your-hub.example/devices/pair/complete`.
 3. The server returns a device token and its **ping-signing public key**. The
    device verifies that key against a fingerprint bound into the pairing code
    (trust-on-first-use over the browser-to-human channel), then persists the
    token, its own key, and the server public key. The private key never leaves
    the device.
+
+Either way, only a single-use pairing token ever crosses the browser; the device
+generates and holds its own key.
 
 **Relay (per login).**
 
@@ -136,7 +146,8 @@ cd shells/android && ./gradlew assembleDebug
 
 `make android` needs the Android SDK + NDK (`ANDROID_HOME` / `ANDROID_NDK_HOME`)
 and a JDK 17+ (`make doctor` checks). Install the APK with
-`adb install -r app-debug.apk`, then in the app: **Pair** -> **Add a login** ->
+`adb install -r app-debug.apk`, then in the app: **Sign in** (or "Enter a code
+instead") -> **Add a login** ->
 **Start relay**.
 
 ### iOS and macOS

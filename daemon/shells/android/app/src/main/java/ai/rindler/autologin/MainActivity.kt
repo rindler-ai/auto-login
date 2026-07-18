@@ -7,6 +7,8 @@
 package ai.rindler.autologin
 
 import ai.rindler.autologin.ui.AutoLoginApp
+import ai.rindler.autologin.ui.EnrollRequest
+import ai.rindler.autologin.ui.parseEnrollUri
 import ai.rindler.autologin.ui.theme.AutoLoginTheme
 import android.Manifest
 import android.content.Intent
@@ -20,6 +22,9 @@ import android.view.WindowManager
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
 
@@ -27,6 +32,11 @@ class MainActivity : FragmentActivity() {
 
     private val requestNotif =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { /* best-effort */ }
+
+    // An autologin://paired sign-in deep link, delivered to this singleTask activity
+    // via onCreate (cold) or onNewIntent (warm). AutoLoginApp observes it and
+    // completes pairing. Never logged — it carries a pairing token.
+    private var pendingEnroll by mutableStateOf<EnrollRequest?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -38,12 +48,28 @@ class MainActivity : FragmentActivity() {
             WindowManager.LayoutParams.FLAG_SECURE,
             WindowManager.LayoutParams.FLAG_SECURE,
         )
+        handleEnrollIntent(intent)
         enableEdgeToEdge()
         setContent {
             AutoLoginTheme {
-                AutoLoginApp(store = KeystoreSecretSource(applicationContext))
+                AutoLoginApp(
+                    store = KeystoreSecretSource(applicationContext),
+                    pendingEnroll = pendingEnroll,
+                    onEnrollConsumed = { pendingEnroll = null },
+                )
             }
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleEnrollIntent(intent)
+    }
+
+    // Extract a sign-in enrollment token from a deep-link intent, if present.
+    private fun handleEnrollIntent(intent: Intent?) {
+        parseEnrollUri(intent?.data)?.let { pendingEnroll = it }
     }
 
     override fun onStart() {

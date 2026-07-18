@@ -34,10 +34,20 @@
         <activity
             android:name=".MainActivity"
             android:exported="true"
+            android:launchMode="singleTask"
             android:label="@string/app_name">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <!-- Sign-in enrollment: the /devices/authorize web flow redirects back here
+                 with a single-use pairing token so the device auto-pairs after the user
+                 signs in. singleTask above delivers it via onNewIntent. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="autologin" android:host="paired" />
             </intent-filter>
         </activity>
 
