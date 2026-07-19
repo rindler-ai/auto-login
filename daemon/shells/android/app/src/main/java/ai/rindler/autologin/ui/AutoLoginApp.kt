@@ -22,21 +22,25 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.launch
 
 private enum class Dest { Onboarding, Pair, Completing, Setup, Home, Enroll, Settings, ManualCode, Advanced }
 
@@ -74,22 +78,25 @@ fun AutoLoginApp(
     }
 
     // Sign-in enrollment: an autologin://paired deep link arrives via MainActivity as
-    // `pendingEnroll`. Complete pairing with the token against the hub the link named
-    // (or, if it omitted one, the hub already stored / the compiled-in default), then
-    // land on Home; on failure show the error on the Completing screen with a retry.
+    // `pendingEnroll`. The link is hostile input (any web page can fire it), so it is
+    // gated first — gateEnroll rejects a link naming any server but the build default,
+    // and an already-linked phone gets an explicit confirmation dialog instead of a
+    // silent re-pair. Then pairing runs with the token against the GATED hub; on
+    // failure the error shows on the Completing screen with a retry.
     var enrollError by remember { mutableStateOf<String?>(null) }
     // The account email the deep link carried, shown as "Linking as {email}…" on the
     // Completing screen before it is persisted (§3.3 / §4).
     var linkingEmail by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(pendingEnroll) {
-        val req = pendingEnroll ?: return@LaunchedEffect
+    // A deep-link enrollment waiting on the "Link this phone again?" confirmation.
+    var pendingRelink by remember { mutableStateOf<Pair<EnrollRequest, String>?>(null) }
+    val scope = rememberCoroutineScope()
+
+    suspend fun runEnroll(req: EnrollRequest, hub: String) {
         enrollError = null
         linkingEmail = req.email
         if (!store.isOnboarded()) store.setOnboarded()
         go(Dest.Completing)
-        val hub = req.hub ?: store.hubUrl() ?: BuildConfig.HUB_URL
         val result = completeEnroll(store, req.token, hub)
-        onEnrollConsumed()
         result.fold(
             onSuccess = {
                 // Persist the account identity ONCE at sign-in (never re-fetched per
@@ -101,6 +108,56 @@ fun AutoLoginApp(
                 goPostPair()
             },
             onFailure = { enrollError = friendlyPairError(it.message) },
+        )
+    }
+
+    LaunchedEffect(pendingEnroll) {
+        val req = pendingEnroll ?: return@LaunchedEffect
+        when (val gate = gateEnroll(
+            linkHub = req.hub,
+            storedHub = store.hubUrl(),
+            buildDefault = BuildConfig.HUB_URL,
+            alreadyPaired = store.deviceToken() != null,
+        )) {
+            is EnrollGate.RejectedHub -> {
+                onEnrollConsumed()
+                linkingEmail = null
+                enrollError =
+                    "This sign-in link points to a different server, so this phone wasn't linked. Try signing in again."
+                go(Dest.Completing)
+            }
+            is EnrollGate.ConfirmRelink -> pendingRelink = req to gate.hub
+            is EnrollGate.Proceed -> {
+                runEnroll(req, gate.hub)
+                onEnrollConsumed()
+            }
+        }
+    }
+
+    pendingRelink?.let { (relinkReq, relinkHub) ->
+        fun dismissRelink() {
+            pendingRelink = null
+            onEnrollConsumed()
+        }
+        AlertDialog(
+            onDismissRequest = { dismissRelink() },
+            shape = MaterialTheme.shapes.large,
+            title = { Text("Link this phone again?") },
+            text = {
+                Text(
+                    "This phone is already linked. Continuing replaces that link and connects it to " +
+                        "${hubHost(relinkHub)} instead. Only continue if you started this sign-in yourself.",
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    dismissRelink()
+                    scope.launch { runEnroll(relinkReq, relinkHub) }
+                }) { Text("Replace link") }
+            },
+            dismissButton = {
+                TextButton(onClick = { dismissRelink() }) { Text("Cancel") }
+            },
         )
     }
 
