@@ -87,6 +87,31 @@ jobs:
           ANDROID_NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/26.1.10909125
         run: make android
 
+      # The released APK must ship the real backend hosts, not the your-hub.example
+      # placeholders in build.gradle.kts. We inject them at BUILD TIME from repo
+      # Variables (Settings -> Secrets and variables -> Actions -> Variables), the
+      # same mechanism the keystore uses. The hosts never live in committed source
+      # (the hostname-guard + gitleaks would block them); only ${{ vars.* }} template
+      # tokens appear here, and the real values reach only the build + the APK.
+      - name: Require backend host Variables (clean-URL guard)
+        env:
+          AUTHORIZE_URL: ${{ vars.AUTHORIZE_URL }}
+          HUB_URL: ${{ vars.HUB_URL }}
+          CATALOG_URL: ${{ vars.CATALOG_URL }}
+          PRIVACY_POLICY_URL: ${{ vars.PRIVACY_POLICY_URL }}
+        run: |
+          set -euo pipefail
+          missing=""
+          for v in AUTHORIZE_URL HUB_URL CATALOG_URL PRIVACY_POLICY_URL; do
+            eval "val=\${$v:-}"
+            [ -n "$val" ] || missing="$missing $v"
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::Missing repo Variable(s):$missing. Set them under Settings -> Secrets and variables -> Actions -> Variables, or the released APK ships empty URLs and 'Sign in' opens a broken page."
+            exit 1
+          fi
+          echo "backend host Variables present — release will inject them via -P flags"
+
       - name: Assemble APK (release-signed if keystore secrets are set, else debug preview)
         id: apk
         working-directory: daemon/shells/android
@@ -96,11 +121,24 @@ jobs:
           KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
           VERSION_NAME: ${{ steps.ver.outputs.version_name }}
+          AUTHORIZE_URL: ${{ vars.AUTHORIZE_URL }}
+          HUB_URL: ${{ vars.HUB_URL }}
+          CATALOG_URL: ${{ vars.CATALOG_URL }}
+          PRIVACY_POLICY_URL: ${{ vars.PRIVACY_POLICY_URL }}
         run: |
           set -euo pipefail
+          # Backend hosts injected from repo Variables (validated non-empty above), so
+          # the released APK points at the real product, not your-hub.example.
+          HOSTS=(
+            -PauthorizeUrl="$AUTHORIZE_URL"
+            -PhubUrl="$HUB_URL"
+            -PcatalogUrl="$CATALOG_URL"
+            -PprivacyPolicyUrl="$PRIVACY_POLICY_URL"
+          )
           if [ -n "${KEYSTORE_B64:-}" ]; then
             echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
             ./gradlew --no-daemon assembleRelease \
+              "${HOSTS[@]}" \
               -PRELEASE_STORE_FILE="$RUNNER_TEMP/release.jks" \
               -PRELEASE_STORE_PASSWORD="$KEYSTORE_PASSWORD" \
               -PRELEASE_KEY_ALIAS="$KEY_ALIAS" \
@@ -108,7 +146,7 @@ jobs:
             SRC=app/build/outputs/apk/release/app-release.apk
             echo "signing=release-signed" >> "$GITHUB_OUTPUT"
           else
-            ./gradlew --no-daemon assembleDebug
+            ./gradlew --no-daemon assembleDebug "${HOSTS[@]}"
             SRC=app/build/outputs/apk/debug/app-debug.apk
             echo "signing=debug-signed **preview** (set ANDROID_KEYSTORE_* secrets for a release-signed APK)" >> "$GITHUB_OUTPUT"
           fi

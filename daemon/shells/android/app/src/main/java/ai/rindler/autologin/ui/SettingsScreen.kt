@@ -33,6 +33,7 @@ import androidx.compose.material.icons.rounded.Public
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Sms
 import androidx.compose.material.icons.rounded.Smartphone
+import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -68,6 +69,7 @@ fun SettingsScreen(
     onBack: () -> Unit,
     onRepair: () -> Unit,
     onReset: () -> Unit,
+    onAdvanced: () -> Unit,
 ) {
     val ctx = LocalContext.current
     val cs = MaterialTheme.colorScheme
@@ -112,6 +114,13 @@ fun SettingsScreen(
                     title = "Re-pair this device",
                     subtitle = "Connect to a different account",
                     onClick = onRepair,
+                )
+                Divider()
+                SettingRow(
+                    icon = Icons.Rounded.Tune,
+                    title = "Advanced",
+                    subtitle = "Self-hosted server & pairing",
+                    onClick = onAdvanced,
                 )
                 Divider()
                 SettingRow(
