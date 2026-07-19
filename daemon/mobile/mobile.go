@@ -20,6 +20,7 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"time"
 
 	"github.com/rindler-ai/auto-login/core/otp"
 	"github.com/rindler-ai/auto-login/core/protocol"
@@ -54,16 +55,24 @@ type Approver interface {
 	Approve(site string, kind string) bool
 }
 
-// CodeExpectationSink is an OPTIONAL native hook that turns the swallowed
-// sms_otp_code SecretPing into an "arm the SMS reader" signal. The Go core calls
-// OnExpectingSMSCode only when an AUTHENTICATED, replay-checked sms_otp_code ping
-// arrives — i.e. a login is now, for up to ttlSeconds, waiting for a texted 2FA
-// code. The native SMS reader uses this to inspect an incoming text ONLY during
-// that window and ignore every text otherwise, so the app is exposed to the
-// user's SMS solely while a real login awaits a code — never the general stream.
-// A nil sink is fine (the signal is simply dropped); the SMS path is passive.
+// CodeExpectationSink is an OPTIONAL native hook that turns a swallowed
+// sms_otp_code / email_otp_code SecretPing into an "arm the reader" signal. The Go
+// core calls OnExpectingSMSCode / OnExpectingEmailCode only when an AUTHENTICATED,
+// replay-checked ping of that kind arrives — i.e. a login is now, for up to
+// ttlSeconds, waiting for a texted (SMS) or emailed 2FA code. The native reader uses
+// this to read the corresponding channel ONLY during that window and ignore it
+// otherwise, so the app is exposed to the user's SMS / mailbox solely while a real
+// login awaits a code — never the general stream. A nil sink is fine (the signal is
+// simply dropped).
+//
+// OnExpectingEmailCode is ADDITIVE: the proven SMS path (OnExpectingSMSCode) is
+// unchanged, and Start still takes a single codeSink — the native class implements
+// both methods, so no bound-signature growth. Unlike SMS (a passive receiver the OS
+// pushes even when the app is closed), email has no OS broadcast, so the native side
+// must actively drive a bounded on-device mailbox poll while this window is armed.
 type CodeExpectationSink interface {
 	OnExpectingSMSCode(site string, ttlSeconds int)
+	OnExpectingEmailCode(site string, ttlSeconds int)
 }
 
 // Session is a running custody agent. Stop ends it and drops the hub connection.
@@ -148,6 +157,102 @@ func ExtractOTPCode(body string) string {
 		return ""
 	}
 	return code
+}
+
+// Mailbox-read errors surfaced by FetchEmailOTPOnce. They are TYPED (not a bare "")
+// so the native reader can tell a dead credential apart from a transient blip and a
+// steady "no code yet": a revoked app-password must surface as a BROKEN mailbox (a
+// warning badge + a one-shot notice), never as an infinite silent retry that stalls
+// the login with zero signal. gomobile flattens a Go error to a Java Exception whose
+// message is Error(); the native side classifies on these stable messages.
+var (
+	// ErrMailboxAuth: the mailbox rejected the app-password (revoked or wrong). The
+	// shell must surface this as a broken mailbox and stop polling it — retrying a
+	// dead credential can never succeed. Static message: never echoes the credential.
+	ErrMailboxAuth = errors.New("email-otp: mailbox rejected the app password")
+	// ErrMailboxUnavailable: a transient failure reaching the mailbox (dial / search /
+	// fetch / timeout). The shell may keep polling within the armed window; it
+	// self-heals, so this must NOT brand the mailbox as broken.
+	ErrMailboxUnavailable = errors.New("email-otp: mailbox temporarily unreachable")
+)
+
+// FetchEmailOTPOnce reads the user's linked mailbox ON THE DEVICE over IMAP and
+// returns ONLY the single extracted one-time code ("" when none has arrived yet),
+// reusing the SAME otp.IMAPMailbox client + otp.ExtractCode extractor the server and
+// desktop daemon use — so every platform shares ONE reader and ONE notion of "what
+// counts as a code," and the native shells implement no IMAP or extraction of their
+// own.
+//
+// host/user/appPassword are the mailbox credential the NATIVE side holds in the
+// keystore and passes in per read; they are DURABLE secrets that stay on the device
+// and NEVER transit — only the returned code is ever eligible to be relayed (via
+// SmsRelayClient.submitEmailOtpCode → POST /devices/email-relay/manual). fromContains
+// restricts candidates to the expected OTP sender for the site; sinceEpochSec bounds
+// the read to mail that arrived at/after the arm time; timeoutSeconds bounds a single
+// windowed poll (0 = one pass, then return).
+//
+// The native side calls this ONLY inside an armed, verified window
+// (OnExpectingEmailCode fired this process-life). Errors are TYPED (see ErrMailboxAuth
+// / ErrMailboxUnavailable): a mailbox that rejects its app-password surfaces as broken
+// instead of hiding behind an empty string. "No code yet" is NOT an error — it returns
+// ("", nil), the steady state a polling reader expects.
+func FetchEmailOTPOnce(host, user, appPassword, fromContains string, sinceEpochSec, timeoutSeconds int64) (string, error) {
+	mbox := otp.IMAPMailbox{Host: host, User: user, Password: appPassword}
+	return fetchEmailOTP(mbox, fromContains, sinceEpochSec, timeoutSeconds)
+}
+
+// VerifyMailboxLogin checks a mailbox app-password by authenticating ONLY — no
+// SEARCH, FETCH, or body read. The Link screen calls THIS (not FetchEmailOTPOnce)
+// to validate a credential, so linking a mailbox never reads the user's mail
+// outside an armed login window. Error is TYPED via classifyMailboxErr and never
+// echoes the credential; nil means the login succeeded.
+func VerifyMailboxLogin(host, user, appPassword string) error {
+	mbox := otp.IMAPMailbox{Host: host, User: user, Password: appPassword}
+	if err := mbox.VerifyLogin(); err != nil {
+		return classifyMailboxErr(err)
+	}
+	return nil
+}
+
+// fetchEmailOTP is the seam FetchEmailOTPOnce delegates to, taking a MailboxReader so
+// the freshness / sender bounds and the typed-error classification are unit-tested
+// against otp.FakeMailbox without any network. It builds the FetchOptions (RequireContext
+// forced on — a bare number without a verification cue must never be relayed), runs the
+// reader, and maps its outcome onto the three device-relevant classes.
+func fetchEmailOTP(reader otp.MailboxReader, fromContains string, sinceEpochSec, timeoutSeconds int64) (string, error) {
+	opts := otp.FetchOptions{
+		FromContains: fromContains,
+		Extract:      otp.Options{RequireContext: true},
+	}
+	if sinceEpochSec > 0 {
+		opts.Since = time.Unix(sinceEpochSec, 0)
+	}
+	if timeoutSeconds > 0 {
+		opts.Timeout = time.Duration(timeoutSeconds) * time.Second
+	}
+	code, err := reader.FetchLatestOTP(context.Background(), opts)
+	if err == nil {
+		// A found code (FetchLatestOTP only returns nil with a non-empty code).
+		return code, nil
+	}
+	return "", classifyMailboxErr(err)
+}
+
+// classifyMailboxErr maps a raw otp/IMAP error onto the device-relevant classes,
+// shared by fetchEmailOTP and VerifyMailboxLogin so both agree on what "broken"
+// vs "transient" vs "fine" means. ErrNoCode (no matching mail yet) and a nil error
+// are both the healthy steady state and map to nil.
+func classifyMailboxErr(err error) error {
+	switch {
+	case err == nil, errors.Is(err, otp.ErrNoCode):
+		return nil
+	case errors.Is(err, otp.ErrIMAPAuth):
+		// Revoked / wrong app-password — the mailbox is broken until re-linked.
+		return ErrMailboxAuth
+	default:
+		// Dial / search / fetch / timeout — transient; the caller may retry.
+		return ErrMailboxUnavailable
+	}
 }
 
 // GenerateDeviceKey returns a fresh base64 Ed25519 private key for the native
@@ -272,8 +377,20 @@ func approveAdapter(appr Approver, codeSink CodeExpectationSink) func(context.Co
 				codeSink.OnExpectingSMSCode(ping.Site, ping.TTLSeconds)
 			}
 			return "", false
+		case protocol.SecretEmailOTPCode:
+			// Identical shape to the SMS case (arm-and-decline). The email code never
+			// rides this lane either — it is read ON THE DEVICE from the user's linked
+			// mailbox and handed back out-of-band via POST /devices/email-relay/manual,
+			// so we ALWAYS decline the release ("", false): nothing is ever sealed over
+			// this HPKE ping. This authenticated ping IS the signal that a login now
+			// awaits an emailed code: surface it so the native mailbox reader arms for
+			// the ping's TTL and actively polls the linked inbox ONLY during that window.
+			if codeSink != nil {
+				codeSink.OnExpectingEmailCode(ping.Site, ping.TTLSeconds)
+			}
+			return "", false
 		default:
-			// email/manual code kinds are not served on this lane.
+			// manual code kind is not served on this lane.
 			return "", false
 		}
 	}

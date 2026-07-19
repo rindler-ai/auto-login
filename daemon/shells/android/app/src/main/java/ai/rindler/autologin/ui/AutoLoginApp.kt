@@ -46,7 +46,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 
-internal enum class Dest { Onboarding, Pair, Completing, Setup, Home, Enroll, Settings, ManualCode, Advanced }
+internal enum class Dest { Onboarding, Pair, Completing, Setup, Home, Enroll, Settings, ManualCode, Advanced, LinkedEmails }
 
 /**
  * Map a RESTORED destination to a safe landing screen (§4d). Every screen restores
@@ -99,6 +99,11 @@ fun AutoLoginApp(
     // pushed screen with a back arrow + "Don't remind me" (reached from the Home nudge).
     // Saved so a rotation on the Setup screen keeps the right chrome.
     var setupFromHome by rememberSaveable { mutableStateOf(false) }
+    // The email screen is reached from Settings, Home, AND the setup checklist. onlyAdd picks
+    // the onboarding single-address form vs the full manage page; returnTo is where back lands.
+    // Both saved so a rotation keeps the right mode + return target.
+    var emailOnlyAdd by rememberSaveable { mutableStateOf(false) }
+    var emailReturnTo by rememberSaveable(stateSaver = DestSaver) { mutableStateOf(Dest.Home) }
     fun go(next: Dest, isForward: Boolean = true) { forward = isForward; dest = next }
     // Every post-pairing route to Home passes through here: a device that has never seen
     // the reliability checklist gets it once, and only once.
@@ -199,6 +204,7 @@ fun AutoLoginApp(
         // Back out of the checklist counts as seeing it — same as "Not now".
         Dest.Setup -> Dest.Home
         Dest.Enroll, Dest.Settings, Dest.ManualCode -> Dest.Home
+        Dest.LinkedEmails -> emailReturnTo
         Dest.Advanced -> if (store.deviceToken() != null) Dest.Settings else Dest.Pair
         Dest.Pair -> if (store.deviceToken() != null) Dest.Home else null
         else -> null
@@ -246,6 +252,7 @@ fun AutoLoginApp(
                     store = store,
                     fromHome = setupFromHome,
                     onDone = { go(Dest.Home, isForward = false) },
+                    onAddEmail = { emailOnlyAdd = true; emailReturnTo = Dest.Setup; go(Dest.LinkedEmails) },
                 )
                 Dest.Home -> HomeScreen(
                     store = store,
@@ -253,12 +260,19 @@ fun AutoLoginApp(
                     onSettings = { go(Dest.Settings) },
                     onEnterCode = { go(Dest.ManualCode) },
                     onFinishSetup = { setupFromHome = true; go(Dest.Setup) },
+                    onManageEmails = { emailOnlyAdd = false; emailReturnTo = Dest.Home; go(Dest.LinkedEmails) },
+                )
+                Dest.LinkedEmails -> LinkedEmailsScreen(
+                    store = store,
+                    onlyAdd = emailOnlyAdd,
+                    onBack = { go(emailReturnTo, isForward = false) },
                 )
                 Dest.Enroll -> EnrollScreen(store = store, onDone = { go(Dest.Home, isForward = false) })
                 Dest.ManualCode -> ManualCodeScreen(store = store, onDone = { go(Dest.Home, isForward = false) })
                 Dest.Settings -> SettingsScreen(
                     store = store,
                     onBack = { go(Dest.Home, isForward = false) },
+                    onManageEmails = { emailOnlyAdd = false; emailReturnTo = Dest.Settings; go(Dest.LinkedEmails) },
                     // A self-hoster (a non-default hub is stored) re-pairs against their
                     // own server via Advanced, not the Rindler sign-in screen (P3).
                     onRepair = { go(if (store.hubUrl() != null) Dest.Advanced else Dest.Pair) },

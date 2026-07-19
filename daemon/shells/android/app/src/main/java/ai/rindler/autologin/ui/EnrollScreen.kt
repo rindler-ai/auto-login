@@ -20,6 +20,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.MailOutline
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Visibility
 import androidx.compose.material.icons.rounded.VisibilityOff
@@ -71,6 +72,9 @@ fun EnrollScreen(store: KeystoreSecretSource, onDone: () -> Unit) {
     var requestedFor by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
     val cs = MaterialTheme.colorScheme
+    // Linked mailbox addresses, for the username autocomplete below. Read once — the set only
+    // changes on the manage page, and a stale suggestion is harmless (it just isn't offered).
+    val linkedEmailAddresses = remember { store.linkedEmailAddresses() }
 
     LaunchedEffect(fetchAttempt) {
         loading = true
@@ -217,6 +221,41 @@ fun EnrollScreen(store: KeystoreSecretSource, onDone: () -> Unit) {
         Column(Modifier.padding(horizontal = 16.dp)) {
             Spacer(Modifier.height(16.dp))
             AppTextField(username, { username = it }, "Username or email")
+        }
+        // Autocomplete: SUGGEST the linked mailbox addresses (a login's username is often the
+        // email that receives its codes). Suggestions only — the field stays free-text, so
+        // this never constrains what the user can type. Shown when the typed text is a prefix/
+        // substring of a linked address and isn't already exactly one.
+        val emailSuggestions = remember(username, linkedEmailAddresses) {
+            val q = username.trim()
+            if (linkedEmailAddresses.none { it.equals(q, ignoreCase = true) }) {
+                linkedEmailAddresses.filter { q.isEmpty() || it.contains(q, ignoreCase = true) }.take(4)
+            } else {
+                emptyList()
+            }
+        }
+        AnimatedVisibility(username.isNotEmpty() && emailSuggestions.isNotEmpty()) {
+            SuggestionBox {
+                emailSuggestions.forEachIndexed { i, addr ->
+                    MediaRow(
+                        title = addr,
+                        compact = true,
+                        leading = {
+                            Box(
+                                Modifier.size(32.dp).clip(CircleShape).background(cs.primary.copy(alpha = 0.12f)),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Icon(Icons.Rounded.MailOutline, null, tint = cs.primary, modifier = Modifier.size(18.dp))
+                            }
+                        },
+                        supporting = "Use this linked email",
+                        onClick = { username = addr },
+                    )
+                    if (i != emailSuggestions.lastIndex) InsetDivider(Dimens.keylineCompact)
+                }
+            }
+        }
+        Column(Modifier.padding(horizontal = 16.dp)) {
             Spacer(Modifier.height(16.dp))
             AppTextField(
                 password, { password = it }, "Password",

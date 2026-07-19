@@ -55,9 +55,32 @@ fun smsRelayOrigin(hubUrl: String): String {
  * manual screen nor the background receiver can crash on a bad network.
  */
 suspend fun submitOtpCode(hubUrl: String, deviceToken: String, code: String): CodeSubmitResult =
+    submitCode(hubUrl, deviceToken, code, "/devices/sms-relay/manual")
+
+/**
+ * Email analog of [submitOtpCode]: POST the on-device-extracted email code to
+ * `POST /devices/email-relay/manual`. Body is byte-identical (`{"code":code}`) with the same
+ * device-bearer auth — only the path differs, so no mailbox/message data ever leaves the
+ * phone. It hits the SAME DeliverOTP rendezvous a paused email-2FA login blocks on. (Verified
+ * live: the route returns 401 unauthenticated on the dev hub.)
+ */
+suspend fun submitEmailOtpCode(hubUrl: String, deviceToken: String, code: String): CodeSubmitResult =
+    submitCode(hubUrl, deviceToken, code, "/devices/email-relay/manual")
+
+/**
+ * POST a 2FA code to [path] on the device-relay origin derived from HUB_URL. Best-effort: any
+ * failure returns [CodeSubmitResult.FAILED] rather than throwing. CONSUME-AND-FORGET: the code
+ * is never logged.
+ */
+private suspend fun submitCode(
+    hubUrl: String,
+    deviceToken: String,
+    code: String,
+    path: String,
+): CodeSubmitResult =
     withContext(Dispatchers.IO) {
         runCatching {
-            val endpoint = URL("${smsRelayOrigin(hubUrl)}/devices/sms-relay/manual")
+            val endpoint = URL("${smsRelayOrigin(hubUrl)}$path")
             val conn = (endpoint.openConnection() as HttpURLConnection).apply {
                 requestMethod = "POST"
                 connectTimeout = 10_000
