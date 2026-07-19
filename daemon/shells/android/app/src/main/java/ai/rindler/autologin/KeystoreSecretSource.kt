@@ -39,6 +39,32 @@ class KeystoreSecretSource(context: Context) : SecretSource {
         )
     }
 
+    init {
+        migrateSiteKeys()
+    }
+
+    /// Repair rows older builds keyed by the RAW typed string ("www.chase.com",
+    /// "https://chase.com/login") instead of the normalized domain a server ping is
+    /// matched against — every such row looked saved on Home but could never serve a
+    /// login (this hit EVERY save made while the catalog fetch was down). Runs on
+    /// every construction; a clean index is a no-op. When a raw row duplicates an
+    /// already-normalized one, the normalized row — the only one lookup() could ever
+    /// have served — is kept and the unreachable duplicate is deleted.
+    private fun migrateSiteKeys() {
+        val stored = sites()
+        val plan = planSiteKeyMigration(stored)
+        if (plan.moves.isEmpty() && plan.drops.isEmpty()) return
+        val e = prefs.edit()
+        for ((from, to) in plan.moves) {
+            prefs.getString(from, null)?.let { e.putString(to, it) }
+            e.remove(from)
+        }
+        for (key in plan.drops) e.remove(key)
+        val rekeyed = stored.map { key -> normalizeSiteKey(key).ifEmpty { key } }.distinct()
+        e.putString(K_SITE_INDEX, JSONArray(rekeyed).toString())
+        e.apply()
+    }
+
     // Reserved keys for this device's identity (never a real site host).
     private companion object {
         const val K_DEVICE_TOKEN = "rindler-meta:device-token"
@@ -104,17 +130,16 @@ class KeystoreSecretSource(context: Context) : SecretSource {
 
     // --- hub URL (which hub this device pairs + connects to) ---
 
-    /// The hub WebSocket URL the user pointed this device at during pairing, or null
-    /// if never set. A release APK ships with a BuildConfig.HUB_URL default (a real
-    /// hub for a branded build, or a placeholder for a self-host build); the pairing
-    /// screen lets the user override it, and the stored value wins from then on so the
-    /// relay reconnects to the SAME hub that minted the pairing token. Not a secret —
+    /// The hub WebSocket URL this device last SUCCESSFULLY paired against, or null
+    /// if never paired. A release APK ships with a BuildConfig.HUB_URL default (a real
+    /// hub for a branded build, or a placeholder for a self-host build); the Advanced
+    /// screen lets the user pair against their own, and the stored value wins from
+    /// then on so the relay reconnects to the SAME hub that minted the pairing token.
+    /// Written ONLY by saveIdentity() — atomically with a successful pairing — so a
+    /// failed or hostile pairing attempt can never re-point the relay (or any later
+    /// bearer-token call) at a server this device never paired with. Not a secret —
     /// just a hostname — but kept in the same store so "Reset device" clears it too.
     fun hubUrl(): String? = prefs.getString(K_HUB_URL, null)?.takeIf { it.isNotBlank() }
-
-    fun setHubUrl(url: String) {
-        prefs.edit().putString(K_HUB_URL, url.trim()).apply()
-    }
 
     // --- SMS auto-read opt-in (the user's choice; no OS permission is involved) ---
 
@@ -231,8 +256,14 @@ class KeystoreSecretSource(context: Context) : SecretSource {
     /// Called by the Go core per approved ping. Returns the site's credential JSON
     /// (the contract above) or "" if we hold nothing for it.
     override fun lookup(site: String): String {
-        // Credentials are stored as the ready-to-parse JSON string, keyed by site.
-        return prefs.getString(site, "") ?: ""
+        // Credentials are stored as the ready-to-parse JSON string, keyed by the
+        // NORMALIZED site (see SiteKey.kt). Try the ping's exact string first, then
+        // its normalized form, so a ping phrased as "www.chase.com" still resolves
+        // the row stored under "chase.com".
+        prefs.getString(site, null)?.let { return it }
+        val key = normalizeSiteKey(site)
+        if (key.isEmpty() || key == site) return ""
+        return prefs.getString(key, "") ?: ""
     }
 
     /// Called by the Go core to answer a server site-inventory query: the domains
@@ -251,25 +282,32 @@ class KeystoreSecretSource(context: Context) : SecretSource {
     fun serverPubkeyB64(): String? = prefs.getString(K_SERVER_PUBKEY, null)
 
     /// Persist the whole pairing result in ONE commit: the hub bearer token, this
-    /// device's private key, and the server's ping-signing public key. All three are
-    /// load-bearing — a token saved without the server pubkey yields a device that
-    /// declines every credential release.
-    fun saveIdentity(token: String, deviceKeyB64: String, serverPubkeyB64: String) {
+    /// device's private key, the server's ping-signing public key, AND the hub the
+    /// pairing succeeded against. All are load-bearing — a token saved without the
+    /// server pubkey yields a device that declines every credential release, and the
+    /// hub committed here (nowhere else) is what keeps a failed pairing from ever
+    /// re-pointing the relay at a server this device did not pair with.
+    fun saveIdentity(token: String, deviceKeyB64: String, serverPubkeyB64: String, hubUrl: String) {
         prefs.edit()
             .putString(K_DEVICE_TOKEN, token)
             .putString(K_DEVICE_KEY, deviceKeyB64)
             .putString(K_SERVER_PUBKEY, serverPubkeyB64)
+            .putString(K_HUB_URL, hubUrl.trim())
             .apply()
     }
 
     // --- enrollment (writes) — native side owns this; Go never writes ---
 
     /// Persist a credential record for a site (the JSON contract above), driven by
-    /// the EnrollScreen. The site is added to the index so HOME can list it.
+    /// the EnrollScreen. The row is keyed by the NORMALIZED site — the exact string
+    /// a server ping is matched against — never the raw typed text, which would
+    /// create a row lookup() can never serve ("www.chase.com" vs a ping for
+    /// "chase.com"). The key is added to the index so HOME can list it.
     fun enroll(site: String, json: String) {
-        val updated = (sites() + site).distinct()
+        val key = normalizeSiteKey(site).ifEmpty { site.trim() }
+        val updated = (sites() + key).distinct()
         prefs.edit()
-            .putString(site, json)
+            .putString(key, json)
             .putString(K_SITE_INDEX, JSONArray(updated).toString())
             .apply()
     }

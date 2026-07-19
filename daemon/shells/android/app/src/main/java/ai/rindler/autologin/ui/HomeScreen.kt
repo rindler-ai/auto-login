@@ -6,6 +6,7 @@ import ai.rindler.autologin.KeystoreSecretSource
 import ai.rindler.autologin.RelayService
 import ai.rindler.autologin.deriveConnectionStatus
 import ai.rindler.autologin.fetchSupportedSites
+import ai.rindler.autologin.normalizeSiteKey
 import ai.rindler.autologin.sms.SmsAutoRead
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -61,14 +62,16 @@ fun HomeScreen(
     LaunchedEffect(running) { requested = running }
     val header = headerState(running, requested)
     var sites by remember { mutableStateOf(store.sites()) }
-    // Supported-site domains (lowercased) from the live catalog, so a saved login for
+    // Supported-site domains (normalized) from the live catalog, so a saved login for
     // a site the hub hasn't mapped yet is badged with a warning. Empty until loaded /
-    // on failure, which just means no badges (fail-open, never a false warning).
+    // on a FAILED fetch (null), which just means no badges (fail-open, never a false
+    // "Not supported yet" claimed off an outage).
     var supported by remember { mutableStateOf<Set<String>>(emptySet()) }
     LaunchedEffect(Unit) {
         supported = fetchSupportedSites(BuildConfig.CATALOG_URL)
-            .map { it.domain.trim().lowercase().removePrefix("www.") }
-            .toSet()
+            ?.map { normalizeSiteKey(it.domain) }
+            ?.toSet()
+            ?: emptySet()
     }
     // The quiet "Finish setting up" nudge. Only the two reliability steps count: SMS
     // auto-read must be BOTH opted in and granted to be active, and the Doze exemption is
@@ -151,7 +154,7 @@ fun HomeScreen(
             // Full-bleed floating rows — NO dividers, NO card (divergence #2).
             sites.forEach { s ->
                 val unsupported = supported.isNotEmpty() &&
-                    !supported.contains(s.trim().lowercase().removePrefix("www."))
+                    !supported.contains(normalizeSiteKey(s))
                 MediaRow(
                     title = s,
                     leading = { SiteLogo(s, size = 40, warning = unsupported) },

@@ -4,6 +4,7 @@ import ai.rindler.autologin.BuildConfig
 import ai.rindler.autologin.KeystoreSecretSource
 import ai.rindler.autologin.SupportedSite
 import ai.rindler.autologin.fetchSupportedSites
+import ai.rindler.autologin.normalizeSiteKey
 import ai.rindler.autologin.requestSiteMapping
 import ai.rindler.autologin.ui.theme.Dimens
 import androidx.compose.animation.AnimatedVisibility
@@ -19,6 +20,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Visibility
 import androidx.compose.material.icons.rounded.VisibilityOff
 import androidx.compose.material3.CircularProgressIndicator
@@ -51,23 +53,31 @@ fun EnrollScreen(store: KeystoreSecretSource, onDone: () -> Unit) {
     var password by remember { mutableStateOf("") }
     var pwVisible by remember { mutableStateOf(false) }
     // Supported-site catalog, fetched live so the list auto-updates as new sites are
-    // added. Empty after load == fetch failed (the catalog has ~1.7k entries).
+    // added. A FAILED fetch (null) is tracked separately from a loaded catalog: an
+    // outage means we know NOTHING about any site, so the screen must never present
+    // "not supported" — it says it couldn't check, and offers a retry.
     var loading by remember { mutableStateOf(true) }
+    var loadFailed by remember { mutableStateOf(false) }
     var catalog by remember { mutableStateOf<List<SupportedSite>>(emptyList()) }
+    var fetchAttempt by remember { mutableStateOf(0) }
     // Site-mapping-request state for the unsupported-site path.
     var requesting by remember { mutableStateOf(false) }
     var requestedFor by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
     val cs = MaterialTheme.colorScheme
 
-    LaunchedEffect(Unit) {
-        catalog = fetchSupportedSites(BuildConfig.CATALOG_URL)
+    LaunchedEffect(fetchAttempt) {
+        loading = true
+        val fetched = fetchSupportedSites(BuildConfig.CATALOG_URL)
+        loadFailed = fetched == null
+        catalog = fetched ?: emptyList()
         loading = false
     }
 
-    val normalized = normalizeSite(site)
+    val normalized = normalizeSiteKey(site)
     val query = site.trim()
-    // The exact supported domain the typed text resolves to (null = not supported).
+    // The exact supported domain the typed text resolves to (null = no match — which
+    // means "not supported" ONLY when the catalog actually loaded).
     val matchedDomain = if (normalized.isEmpty()) null
     else catalog.firstOrNull { it.domain.equals(normalized, ignoreCase = true) }?.domain
     val isSupported = matchedDomain != null
@@ -81,11 +91,17 @@ fun EnrollScreen(store: KeystoreSecretSource, onDone: () -> Unit) {
     // Offer a "request site mapping" row (styled like the suggestions) when the typed
     // text looks like a real domain, isn't supported, and the catalog matched nothing.
     val looksLikeDomain = normalized.length >= 4 && normalized.contains(".")
-    val showRequestMapping = !loading && !isSupported && matches.isEmpty() && looksLikeDomain
+    val showRequestMapping = canOfferMappingRequest(
+        catalogLoaded = !loading && !loadFailed,
+        isSupported = isSupported,
+        hasMatches = matches.isNotEmpty(),
+        looksLikeDomain = looksLikeDomain,
+    )
     val alreadyRequested = requestedFor != null && requestedFor == normalized
 
     val siteSupport = when {
-        loading -> "Loading supported sites…"
+        loading -> "Checking supported sites…"
+        loadFailed -> "Couldn't check supported sites — you can still save this login"
         isSupported -> "Supported"
         showSuggestions -> "Pick a supported site below"
         showRequestMapping -> "Not supported yet — you can still save it below"
@@ -128,6 +144,30 @@ fun EnrollScreen(store: KeystoreSecretSource, onDone: () -> Unit) {
                     )
                     if (i != matches.lastIndex) InsetDivider(Dimens.keylineCompact)
                 }
+            }
+        }
+        // Catalog outage: say so honestly and offer a retry — never "not supported".
+        AnimatedVisibility(!loading && loadFailed) {
+            SuggestionBox {
+                MediaRow(
+                    title = "Couldn't load the list of supported sites",
+                    compact = true,
+                    leading = {
+                        Box(
+                            Modifier.size(32.dp).clip(CircleShape).background(cs.primary.copy(alpha = 0.12f)),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                Icons.Rounded.Refresh,
+                                contentDescription = null,
+                                tint = cs.primary,
+                                modifier = Modifier.size(18.dp),
+                            )
+                        }
+                    },
+                    supporting = "Tap to try again",
+                    onClick = { fetchAttempt++ },
+                )
             }
         }
         AnimatedVisibility(showRequestMapping) {
@@ -200,7 +240,12 @@ fun EnrollScreen(store: KeystoreSecretSource, onDone: () -> Unit) {
                         .put("username", username.trim())
                         .put("password", password)
                         .toString()
-                    store.enroll(matchedDomain ?: site.trim(), json)
+                    // Key by the NORMALIZED domain — the exact string a server ping is
+                    // matched against. The raw typed text ("www.chase.com",
+                    // "https://chase.com/login") would store a row lookup() can never
+                    // serve; that hit every save made while the catalog fetch was down.
+                    // store.enroll() normalizes again (defense in depth).
+                    store.enroll(matchedDomain ?: normalized.ifEmpty { site.trim() }, json)
                     onDone()
                 },
             )
@@ -223,12 +268,16 @@ private fun SuggestionBox(content: @Composable () -> Unit) {
     }
 }
 
-/** Normalize a typed site to a bare domain for matching against the catalog:
- *  drop scheme, a leading www., and any path so "https://www.x.com/login" -> "x.com". */
-private fun normalizeSite(s: String): String =
-    s.trim().lowercase()
-        .removePrefix("https://")
-        .removePrefix("http://")
-        .removePrefix("www.")
-        .substringBefore("/")
-        .trim()
+/**
+ * Whether to show the "Request site mapping" row — i.e. whether we may ASSERT the
+ * typed site is not supported. Only a LOADED catalog can say that: a failed fetch
+ * proves nothing about any site, so it must never present "not supported" (the
+ * screen shows the couldn't-check + retry row instead). Pure; unit-tested in
+ * CatalogGateTest.
+ */
+internal fun canOfferMappingRequest(
+    catalogLoaded: Boolean,
+    isSupported: Boolean,
+    hasMatches: Boolean,
+    looksLikeDomain: Boolean,
+): Boolean = catalogLoaded && !isSupported && !hasMatches && looksLikeDomain
