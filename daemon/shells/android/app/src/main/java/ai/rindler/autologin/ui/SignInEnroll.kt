@@ -21,16 +21,31 @@ import kotlinx.coroutines.withContext
 const val ENROLL_SCHEME = "autologin"
 private const val ENROLL_HOST = "paired"
 
-/** A pairing token handed back from the sign-in web flow via the deep link. */
-data class EnrollRequest(val token: String, val hub: String?)
+/**
+ * A pairing token handed back from the sign-in web flow via the deep link, plus the
+ * optional Rindler account identity (email / Google avatar) the web page appends from
+ * Clerk. Identity is presentational only — it drives AccountHeader; a link that omits
+ * it degrades to the "Signed in" + Shield fallback.
+ */
+data class EnrollRequest(
+    val token: String,
+    val hub: String?,
+    val email: String? = null,
+    val avatar: String? = null,
+)
 
-/** Parse an `autologin://paired?token=…&hub=…` deep link, or null if it isn't one. */
+/** Parse an `autologin://paired?token=…&hub=…&email=…&avatar=…` deep link, or null. */
 fun parseEnrollUri(uri: Uri?): EnrollRequest? {
     if (uri == null) return null
     if (!uri.scheme.equals(ENROLL_SCHEME, ignoreCase = true)) return null
     if (!uri.host.equals(ENROLL_HOST, ignoreCase = true)) return null
     val token = uri.getQueryParameter("token")?.takeIf { it.isNotBlank() } ?: return null
-    return EnrollRequest(token, uri.getQueryParameter("hub"))
+    return EnrollRequest(
+        token = token,
+        hub = uri.getQueryParameter("hub"),
+        email = uri.getQueryParameter("email")?.takeIf { it.isNotBlank() },
+        avatar = uri.getQueryParameter("avatar")?.takeIf { it.isNotBlank() },
+    )
 }
 
 /** Open the sign-in enrollment page in a Custom Tab. */

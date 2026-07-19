@@ -212,6 +212,19 @@ func Pair(pairURL, pairingCode, deviceName, platform, devicePubkeyB64 string) (*
 	}, nil
 }
 
+// Unpair unlinks THIS device from the user's account server-side — the network
+// half of the app's "Sign out". After it returns nil the device row is revoked,
+// its hub socket is dropped, and the token is dead.
+//
+// Only the token identifies the caller — there is no device-id parameter — so
+// this can never unlink another device. A non-2xx response is returned as an
+// error: the shell MUST NOT clear its local credentials on failure without
+// telling the user the account is still linked. Signature stays gomobile-safe
+// (strings + error).
+func Unpair(hubURL, deviceToken string) error {
+	return agent.RevokeSelf(context.Background(), hubURL, deviceToken)
+}
+
 // --- internals (not part of the bound surface) ---
 
 func decodeDeviceKey(b64 string) (ed25519.PrivateKey, error) {

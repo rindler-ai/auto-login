@@ -23,7 +23,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Bolt
 import androidx.compose.material.icons.rounded.CloudOff
 import androidx.compose.material.icons.rounded.Shield
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -39,9 +38,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 
-/** A crafted hero emblem: concentric emerald halos (soft glow) under a crisp ring,
- *  with the slide icon larger and centered. Reads as intentional art, not a stock
- *  glyph dropped into a flat circle. */
+/** A crafted hero emblem: concentric emerald halos (STATIC — no loops) under a crisp
+ *  ring, with the slide icon carried by the shared [IconBadge] as the inner core. Reads
+ *  as intentional art, not a stock glyph dropped into a flat circle. */
 @Composable
 private fun OnboardingArt(icon: ImageVector) {
     val primary = MaterialTheme.colorScheme.primary
@@ -50,14 +49,13 @@ private fun OnboardingArt(icon: ImageVector) {
             val c = size.minDimension / 2f
             drawCircle(primary.copy(alpha = 0.05f), radius = c)          // soft outer glow
             drawCircle(primary.copy(alpha = 0.09f), radius = c * 0.72f)  // mid glow
-            drawCircle(primary.copy(alpha = 0.14f), radius = c * 0.46f)  // inner disc under icon
             drawCircle(                                                  // crisp defining ring
                 primary.copy(alpha = 0.22f),
                 radius = c * 0.72f,
                 style = Stroke(width = 1.5.dp.toPx()),
             )
         }
-        Icon(icon, null, tint = primary, modifier = Modifier.size(58.dp))
+        IconBadge(icon, 72.dp)
     }
 }
 
@@ -96,60 +94,66 @@ fun OnboardingScreen(onDone: () -> Unit) {
     Column(
         Modifier
             .fillMaxSize()
-            .background(cs.background)
-            .padding(horizontal = 28.dp),
+            .background(cs.surface),
     ) {
+        // Top zone (56dp) — Skip is an interactive affordance (accent budget → primary),
+        // hidden on the final slide where the CTA reads "Get started".
         Row(
-            Modifier.fillMaxWidth().padding(top = 8.dp),
+            Modifier.fillMaxWidth().height(56.dp).padding(horizontal = 4.dp),
             horizontalArrangement = Arrangement.End,
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            TextButton(onClick = onDone) {
-                Text("Skip", color = cs.onSurfaceVariant, style = MaterialTheme.typography.labelLarge)
+            if (!last) {
+                TextButton(onClick = onDone) {
+                    Text("Skip", color = cs.primary, style = MaterialTheme.typography.labelLarge)
+                }
             }
         }
 
+        // The pager carries ONLY illustration + text; dots + CTA are fixed chrome.
         HorizontalPager(state = pager, modifier = Modifier.weight(1f)) { page ->
             val s = slides[page]
             Column(
                 Modifier.fillMaxSize(),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                // Bias the block just above center: a touch more room below than above
-                // so the eye lands on the emblem, not on empty space.
-                Spacer(Modifier.weight(0.82f))
+                Spacer(Modifier.weight(1f))
                 OnboardingArt(s.icon)
-                Spacer(Modifier.height(40.dp))
+                Spacer(Modifier.height(32.dp))
                 Text(
                     s.title,
                     style = MaterialTheme.typography.headlineMedium,
                     color = cs.onBackground,
                     textAlign = TextAlign.Center,
                 )
-                Spacer(Modifier.height(14.dp))
+                Spacer(Modifier.height(12.dp))
                 Text(
                     s.body,
                     style = MaterialTheme.typography.bodyLarge,
                     color = cs.onSurfaceVariant,
                     textAlign = TextAlign.Center,
-                    modifier = Modifier.padding(horizontal = 4.dp),
+                    modifier = Modifier.padding(horizontal = 32.dp),
                 )
                 Spacer(Modifier.weight(1f))
             }
         }
 
         Row(
-            Modifier.fillMaxWidth().padding(vertical = 24.dp),
+            Modifier.fillMaxWidth().padding(bottom = 24.dp),
             horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically,
         ) {
             repeat(slides.size) { i ->
                 val active = pager.currentPage == i
-                val w by animateDpAsState(if (active) 22.dp else 7.dp, label = "w")
-                val c by animateColorAsState(if (active) cs.primary else cs.outline, label = "c")
+                val w by animateDpAsState(if (active) 22.dp else 8.dp, label = "w")
+                val c by animateColorAsState(
+                    if (active) cs.primary else cs.onSurfaceVariant.copy(alpha = 0.3f),
+                    label = "c",
+                )
                 Box(
                     Modifier
-                        .padding(horizontal = 3.dp)
-                        .height(7.dp)
+                        .padding(horizontal = 4.dp)
+                        .height(8.dp)
                         .width(w)
                         .clip(CircleShape)
                         .background(c),
@@ -162,7 +166,7 @@ fun OnboardingScreen(onDone: () -> Unit) {
             onClick = {
                 if (last) onDone() else scope.launch { pager.animateScrollToPage(pager.currentPage + 1) }
             },
-            modifier = Modifier.padding(bottom = 20.dp),
+            modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 24.dp),
         )
     }
 }

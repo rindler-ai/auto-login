@@ -13,11 +13,8 @@ import ai.rindler.autologin.ui.theme.AutoLoginTheme
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.net.Uri
 import android.os.Build
 import android.os.Bundle
-import android.os.PowerManager
-import android.provider.Settings
 import android.view.WindowManager
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -78,27 +75,18 @@ class MainActivity : FragmentActivity() {
         RelayService.ensureRunning(this) // no-op until paired
     }
 
+    // Gated on the setup checklist: before it has been seen, the FIRST notification ask
+    // belongs to NotificationToggle, where the user has just read what notifications buy
+    // them and flipped our switch. An unprimed cold-start prompt spends the one shot
+    // Android gives us on a dialog with no context — deny it and the row can only deep-link
+    // to system settings. After the checklist, this is the ordinary re-ask on launch.
     private fun ensureNotificationPermission() {
+        if (!KeystoreSecretSource(applicationContext).isSetupSeen()) return
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
             ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) !=
             PackageManager.PERMISSION_GRANTED
         ) {
             requestNotif.launch(Manifest.permission.POST_NOTIFICATIONS)
-        }
-    }
-
-    /** Offer to exempt the app from Doze so the always-on relay is not killed. */
-    fun requestIgnoreBatteryOptimizations() {
-        val pm = getSystemService(PowerManager::class.java)
-        if (!pm.isIgnoringBatteryOptimizations(packageName)) {
-            runCatching {
-                startActivity(
-                    Intent(
-                        Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
-                        Uri.parse("package:$packageName"),
-                    ),
-                )
-            }
         }
     }
 }
