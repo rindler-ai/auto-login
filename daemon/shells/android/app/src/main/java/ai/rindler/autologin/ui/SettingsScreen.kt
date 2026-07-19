@@ -21,6 +21,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -54,7 +55,11 @@ fun SettingsScreen(
     val cs = MaterialTheme.colorScheme
     // The relay enabled/paused state drives the AccountHeader Switch here too (the same
     // component as Home; only the avatar is inert on Settings via onOpenSettings = null).
-    var active by remember { mutableStateOf(RelayService.isRunning) }
+    // Actual vs requested, same split as Home: RelayService.isRunning is snapshot state, so
+    // the status line follows the real session while the switch answers the tap at once.
+    val running = RelayService.isRunning
+    var requested by remember { mutableStateOf(running) }
+    LaunchedEffect(running) { requested = running }
     var confirmSignOut by remember { mutableStateOf(false) }
     // Sign-out is a NETWORK action first: it unlinks the device server-side (Mobile.unpair
     // -> POST /devices/revoke-self) before anything local is wiped. If that call fails the
@@ -99,12 +104,12 @@ fun SettingsScreen(
         AccountHeader(
             email = store.accountEmail(),
             avatarUrl = store.avatarUrl(),
-            status = deriveConnectionStatus(active, toggleInFlight = false),
-            serviceEnabled = active,
-            toggleInFlight = false,
+            status = deriveConnectionStatus(running, toggleInFlight = requested != running),
+            serviceEnabled = requested,
+            toggleInFlight = requested != running,
             onToggle = {
-                active = !active
-                if (active) RelayService.ensureRunning(ctx) else RelayService.stop(ctx)
+                requested = !requested
+                if (requested) RelayService.ensureRunning(ctx) else RelayService.stop(ctx)
             },
             onOpenSettings = null,
             scrolled = false,
