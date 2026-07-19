@@ -60,6 +60,7 @@ fun SettingsScreen(
     val running = RelayService.isRunning
     var requested by remember { mutableStateOf(running) }
     LaunchedEffect(running) { requested = running }
+    val header = headerState(running, requested)
     var confirmSignOut by remember { mutableStateOf(false) }
     // Sign-out is a NETWORK action first: it unlinks the device server-side (Mobile.unpair
     // -> POST /devices/revoke-self) before anything local is wiped. If that call fails the
@@ -104,9 +105,9 @@ fun SettingsScreen(
         AccountHeader(
             email = store.accountEmail(),
             avatarUrl = store.avatarUrl(),
-            status = deriveConnectionStatus(running, toggleInFlight = requested != running),
-            serviceEnabled = requested,
-            toggleInFlight = requested != running,
+            status = header.status,
+            serviceEnabled = header.switchOn,
+            toggleInFlight = header.inFlight,
             onToggle = {
                 requested = !requested
                 if (requested) RelayService.ensureRunning(ctx) else RelayService.stop(ctx)
