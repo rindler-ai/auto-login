@@ -49,7 +49,16 @@ fun HomeScreen(
     val ctx = LocalContext.current
     val cs = MaterialTheme.colorScheme
     val warningInk = ai.rindler.autologin.ui.theme.LocalExtendedColors.current.warning
-    var active by remember { mutableStateOf(RelayService.isRunning) }
+    // The relay's ACTUAL state, observed (RelayService.isRunning is snapshot state), and
+    // the user's REQUESTED state. They differ only while a toggle is in flight: the relay
+    // session is established asynchronously, so the switch answers immediately while the
+    // status line keeps telling the truth until the session really lands.
+    val running = RelayService.isRunning
+    var requested by remember { mutableStateOf(running) }
+    // Adopt the service's own state whenever it changes — this both resolves an in-flight
+    // toggle and corrects the header when the relay comes up on its own (right after
+    // pairing, or a START_STICKY restart).
+    LaunchedEffect(running) { requested = running }
     var sites by remember { mutableStateOf(store.sites()) }
     // Supported-site domains (lowercased) from the live catalog, so a saved login for
     // a site the hub hasn't mapped yet is badged with a warning. Empty until loaded /
@@ -88,12 +97,12 @@ fun HomeScreen(
             AccountHeader(
                 email = store.accountEmail(),
                 avatarUrl = store.avatarUrl(),
-                status = deriveConnectionStatus(active, toggleInFlight = false),
-                serviceEnabled = active,
-                toggleInFlight = false,
+                status = deriveConnectionStatus(running, toggleInFlight = requested != running),
+                serviceEnabled = requested,
+                toggleInFlight = requested != running,
                 onToggle = {
-                    active = !active
-                    if (active) RelayService.ensureRunning(ctx) else RelayService.stop(ctx)
+                    requested = !requested
+                    if (requested) RelayService.ensureRunning(ctx) else RelayService.stop(ctx)
                 },
                 onOpenSettings = onSettings,
                 scrolled = scrolled,

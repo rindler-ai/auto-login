@@ -24,6 +24,7 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
+import androidx.compose.runtime.mutableStateOf
 import androidx.core.app.NotificationCompat
 
 class RelayService : Service() {
@@ -157,10 +158,22 @@ class RelayService : Service() {
         private const val CHANNEL = "custody_relay"
         private const val NOTIF_ID = 1
 
-        /** Whether the relay is live (drives the Home status). Best-effort. */
-        @Volatile
-        var isRunning: Boolean = false
-            private set
+        /**
+         * Whether the relay is live (drives the Home status). Best-effort.
+         *
+         * Backed by Compose snapshot state, NOT a plain @Volatile field, because the UI
+         * observes it. The relay session is established asynchronously after the service
+         * starts, so a screen that merely read this once at composition — Home, right
+         * after pairing — latched `false` and showed "Paused" while the relay was
+         * genuinely up. Snapshot state makes the read reactive so the header corrects
+         * itself the moment the session lands. Writes are thread-safe.
+         */
+        private val runningState = mutableStateOf(false)
+        var isRunning: Boolean
+            get() = runningState.value
+            private set(value) {
+                runningState.value = value
+            }
 
         /** Whether the device-egress tunnel is live (drives the egress status). */
         @Volatile
