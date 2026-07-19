@@ -109,7 +109,7 @@ fun SmsAutoReadToggle(store: KeystoreSecretSource) {
 
     val supporting = when {
         active -> "Fills one-time codes automatically, only while a login is waiting"
-        needsPermission -> "Permission was turned off — turn on again to re-grant it"
+        needsPermission -> "SMS permission was turned off — turn this on to allow it again"
         justDenied -> "Permission denied — turn on to allow, or type codes by hand"
         else -> "Lets this app see incoming texts to pull out one-time codes — only while a sign-in is waiting for one"
     }
@@ -157,9 +157,9 @@ fun BatteryToggle() {
 }
 
 /**
- * Status notifications, shown ONLY when the OS can still be asked (SDK 33+ and the
- * permission is not granted) — once granted there is nothing to offer, so the row
- * disappears rather than sitting there permanently on.
+ * Status notifications (SDK 33+ only, where the permission exists at all). The row is
+ * ALWAYS shown on those versions and reports the live grant, like every other row in the
+ * checklist — it deliberately does not remove itself once granted.
  *
  * A first denial is recoverable by asking again; Android silently no-ops the second ask
  * once the user is in the permanently-denied state, so a launcher result that leaves the
@@ -198,28 +198,36 @@ fun NotificationToggle() {
         }
     }
 
-    // Nothing to ask for — the row would be an always-on switch with no action behind it.
-    if (hasPerm) return
-
+    // This row STAYS once the permission is granted. It used to remove itself, on the
+    // reasoning that an always-on switch has no action behind it — which was wrong twice
+    // over. It made a row vanish under the user's finger the instant they granted, which
+    // reads as a bug rather than as success, and it left the setting with no home in the
+    // app afterwards. It also broke the checklist's own consistency: the two rows above
+    // stay put and report their state. BatteryToggle already solves this exact shape (the
+    // OS owns revocation there too) by staying visible and handing OFF to system settings,
+    // so this now behaves the same way.
     SettingRow(
         leading = Icons.Rounded.Notifications,
         title = "Show status notifications",
-        supporting = if (promptExhausted) {
-            "Blocked — turn notifications on for this app in system settings"
-        } else {
-            "Show a notice while Auto-Login is running in the background"
+        supporting = when {
+            hasPerm -> "On — you'll see a notice while Auto-Login is running"
+            promptExhausted -> "Blocked — turn notifications on for this app in system settings"
+            else -> "Show a notice while Auto-Login is running in the background"
         },
         trailing = RowTrailing.Switch(
-            checked = false,
+            checked = hasPerm,
             onChange = { on ->
-                // Only an ON tap does anything: the row is shown solely in the ungranted
-                // state, so there is no OFF to honour here.
                 if (on) {
                     if (promptExhausted) {
                         openNotificationSettings()
                     } else {
                         requestNotif.launch(Manifest.permission.POST_NOTIFICATIONS)
                     }
+                } else {
+                    // Android has no revoke API, so OFF hands off to system settings and
+                    // leaves the switch wherever the system actually has it (re-derived on
+                    // resume). Flipping it off locally would be a switch that lies.
+                    openNotificationSettings()
                 }
             },
         ),

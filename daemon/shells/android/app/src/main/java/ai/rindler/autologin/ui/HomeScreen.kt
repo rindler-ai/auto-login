@@ -128,6 +128,7 @@ fun HomeScreen(
         SettingRow(
             leading = Icons.Rounded.Dialpad,
             title = "Enter a login code",
+                supporting = "Type a code from a text or email if it wasn't filled in automatically",
             trailing = RowTrailing.Chevron,
             onClick = onEnterCode,
         )

@@ -75,7 +75,7 @@ fun PairScreen(onAdvanced: () -> Unit) {
         )
         AnimatedVisibility(failed) {
             Column(Modifier.padding(horizontal = 16.dp)) {
-                StatusLine(StatusKind.Error, "Couldn't open your browser. Try again.")
+                StatusLine(StatusKind.Error, "Couldn't open a browser. Check that you have one installed and enabled, then try again.")
             }
         }
         Spacer(Modifier.weight(1f))

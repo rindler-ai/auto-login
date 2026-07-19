@@ -65,17 +65,17 @@ private val slides = listOf(
     Slide(
         Icons.Rounded.Shield,
         "Stored on your phone",
-        "Credentials are encrypted at rest in this device's secure storage. The server doesn't keep a hosted credential copy.",
+        "Your saved logins are stored encrypted on this phone. Rindler's servers don't keep a copy.",
     ),
     Slide(
         Icons.Rounded.Bolt,
         "Hands-free once you're set up",
-        "Set up once, then close the app. When one of your sign-ins needs a credential, your phone releases only the requested username, password or one-time code — automatically, no tap needed.",
+        "Set up once, then close the app. When one of your sign-ins needs a credential, your phone releases only the requested username, password or one-time code, automatically in the background. If a texted code ever isn't picked up, you can type it in yourself.",
     ),
     Slide(
         Icons.Rounded.CloudOff,
         "Only for a verified request",
-        "Your phone releases a credential only to a request it cryptographically verifies is from the server — for your account and that exact sign-in — sealed end-to-end to that login's single-use key so the server can never read it.",
+        "Your phone only answers requests it can verify came from your own Rindler sign-in. Each credential is sealed for that one sign-in, so no server or network in between can read it — it's opened only by the worker doing your sign-in, used once, and never stored.",
     ),
 )
 

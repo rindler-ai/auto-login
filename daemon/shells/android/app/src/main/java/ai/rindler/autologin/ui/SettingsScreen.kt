@@ -94,7 +94,9 @@ fun SettingsScreen(
                 onFailure = {
                     signOutError =
                         "Couldn't reach the server to unlink this phone, so it's still " +
-                            "linked to your account. Check your connection and try again."
+                            "linked to your account. Check your connection and try again, or " +
+                            "sign out anyway — your saved logins are erased from this phone, " +
+                            "but it stays listed on your account until you remove it there."
                 },
             )
         }
@@ -141,7 +143,7 @@ fun SettingsScreen(
         SectionHeader("MANAGE")
         SettingRow(
             leading = Icons.Rounded.Sync,
-            title = "Re-pair device",
+            title = "Pair this phone again",
             trailing = RowTrailing.Chevron,
             onClick = onRepair,
         )
