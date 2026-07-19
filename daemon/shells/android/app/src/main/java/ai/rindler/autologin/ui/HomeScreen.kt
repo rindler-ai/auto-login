@@ -204,7 +204,7 @@ private fun EmptyLogins(onAdd: () -> Unit) {
         Text("No logins yet", style = MaterialTheme.typography.titleMedium, color = cs.onSurface)
         Spacer(Modifier.height(8.dp))
         Text(
-            "Logins you save will appear here, stored only on this phone.",
+            "Logins you save will appear here, encrypted on this phone. Our servers can't read them.",
             style = MaterialTheme.typography.bodyMedium,
             color = cs.onSurfaceVariant,
             textAlign = TextAlign.Center,

@@ -14,6 +14,7 @@ package ai.rindler.autologin.ui
 
 import ai.rindler.autologin.BatteryExemption
 import ai.rindler.autologin.BuildConfig
+import ai.rindler.autologin.EgressMintResult
 import ai.rindler.autologin.KeystoreSecretSource
 import ai.rindler.autologin.RelayService
 import ai.rindler.autologin.disableEgress
@@ -110,7 +111,7 @@ fun SmsAutoReadToggle(store: KeystoreSecretSource) {
         active -> "Fills one-time codes automatically, only while a login is waiting"
         needsPermission -> "Permission was turned off — turn on again to re-grant it"
         justDenied -> "Permission denied — turn on to allow, or type codes by hand"
-        else -> "Fills one-time codes automatically so a login never stalls"
+        else -> "Lets this app see incoming texts to pull out one-time codes — only while a sign-in is waiting for one"
     }
 
     SettingRow(
@@ -142,9 +143,9 @@ fun BatteryToggle() {
         leading = Icons.Rounded.Battery5Bar,
         title = "Keep running in the background",
         supporting = if (exempt) {
-            "On — codes keep flowing while the app is closed"
+            "On — sign-ins can complete while the app is closed"
         } else {
-            "Android pauses idle apps — this keeps codes flowing while the app is closed"
+            "Android pauses idle apps — allow this so sign-ins keep working when the app is closed. Uses a little more battery."
         },
         trailing = RowTrailing.Switch(
             checked = exempt,
@@ -206,7 +207,7 @@ fun NotificationToggle() {
         supporting = if (promptExhausted) {
             "Blocked — turn notifications on for this app in system settings"
         } else {
-            "See when this phone is asked for a login — nothing happens silently"
+            "Show a notice while Auto-Login is running in the background"
         },
         trailing = RowTrailing.Switch(
             checked = false,
@@ -247,6 +248,9 @@ fun EgressToggle(store: KeystoreSecretSource) {
     var active by remember { mutableStateOf(store.isEgressEnabled()) }
     var confirming by remember { mutableStateOf(false) }
     var failed by remember { mutableStateOf(false) }
+    // Distinct from `failed`: the server offers no egress gateway at all, so the switch
+    // can never succeed here and must not invite a retry.
+    var unavailable by remember { mutableStateOf(false) }
     // The switch is the opt-in; `connected` is the go-core's LIVE handshake state, polled
     // so the status is truthful (mint can succeed while the tunnel never comes up — an
     // unreachable gateway or a handshake failure). Without this, the toggle read "On" even
@@ -275,6 +279,7 @@ fun EgressToggle(store: KeystoreSecretSource) {
         store.unlinkEgress()
         active = false
         failed = false
+        unavailable = false
         RelayService.ensureRunning(ctx) // reconciles egress OFF (token now gone)
         // Best-effort server-side revoke so the minted token stops working; the local
         // unlink already dropped the tunnel, so a failed revoke is only a cleanup miss.
@@ -288,15 +293,24 @@ fun EgressToggle(store: KeystoreSecretSource) {
     fun confirmOn() {
         confirming = false
         failed = false
+        unavailable = false
         scope.launch {
-            val mint = mintEgress(hub, store.deviceToken() ?: "", Build.MODEL ?: "device")
-            if (mint != null) {
-                store.linkEgress(mint.token, mint.gateway)
-                RelayService.ensureRunning(ctx) // reconciles egress ON
-                active = true
-            } else {
-                active = false
-                failed = true
+            when (val mint = mintEgress(hub, store.deviceToken() ?: "", Build.MODEL ?: "device")) {
+                is EgressMintResult.Ok -> {
+                    store.linkEgress(mint.mint.token, mint.mint.gateway)
+                    RelayService.ensureRunning(ctx) // reconciles egress ON
+                    active = true
+                }
+                // No gateway on this server: permanent, so say so instead of inviting a
+                // retry that can only fail the same way.
+                EgressMintResult.Unavailable -> {
+                    active = false
+                    unavailable = true
+                }
+                EgressMintResult.Failed -> {
+                    active = false
+                    failed = true
+                }
             }
         }
     }
@@ -308,19 +322,21 @@ fun EgressToggle(store: KeystoreSecretSource) {
         }
         // Turning ON always shows the consent dialog FIRST; nothing is minted until confirm.
         failed = false
+        unavailable = false
         confirming = true
     }
 
     val supporting = when {
-        connected -> "On — sites you automate see this device's IP"
-        failed -> "Couldn't turn this on — try again"
-        active -> "Turning on… if this stays, check your connection"
-        else -> "Your sessions come from your home internet, not a data center — fewer blocks"
+        connected -> "On — sites you automate see this phone's IP"
+        unavailable -> "Optional · not available on this server yet"
+        failed -> "Turned off — the connection failed. Turn on to try again."
+        active -> "Turning on… taking a while? Check this phone's internet connection"
+        else -> "Optional · your agent browses from your home internet instead of a data centre, which fewer sites block"
     }
 
     SettingRow(
         leading = Icons.Rounded.SwapVert,
-        title = "Route requests through this device",
+        title = "Use this phone's internet connection",
         supporting = supporting,
         trailing = RowTrailing.Switch(checked = active, onChange = { setEnabled(it) }),
     )
@@ -333,15 +349,20 @@ fun EgressToggle(store: KeystoreSecretSource) {
             shape = MaterialTheme.shapes.large,
             title = { Text("Use this device's connection?") },
             text = {
-                // DRAFT consent copy, verbatim, pending legal review.
+                // Consent copy. States the real tradeoff without overstating the risk: this
+                // carries the user's OWN agent traffic over their own connection. It is not a
+                // shared proxy pool and no bandwidth is resold, so the ISP clauses about
+                // running a "server"/"proxy" or reselling access do not squarely apply, and
+                // an account-suspension warning was disproportionate to what actually happens.
                 Text(
-                    "When on, Auto-Login routes your AI agent's web traffic through this device and its " +
-                        "internet connection. Sites you automate will see THIS device's IP address, not " +
-                        "the server's. Many residential ISPs prohibit running a \"server,\" \"proxy,\" or " +
-                        "\"commercial\" traffic on consumer plans (e.g. Comcast Xfinity, Verizon Fios, " +
-                        "T-Mobile Home Internet), which can lead to service suspension. You are responsible " +
-                        "for compliance with your ISP's terms. Only your own agent sessions use this " +
-                        "connection. You can turn this off anytime.",
+                    "When on, Auto-Login sends your own agent's web traffic through this phone's " +
+                        "internet connection. Sites you automate will see this phone's IP address " +
+                        "instead of the server's.\n\n" +
+                        "Only your own sessions use it. Your connection is never shared with anyone " +
+                        "else, pooled, or resold.\n\n" +
+                        "It uses your home data, and some internet providers limit what consumer plans " +
+                        "may be used for, so it's worth a look at your plan's terms. You can turn this " +
+                        "off at any time.",
                 )
             },
             confirmButton = {
