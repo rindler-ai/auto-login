@@ -72,9 +72,12 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.foundation.selection.toggleable
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
@@ -270,10 +273,21 @@ fun AccountHeader(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         // LEFT — the pause/resume Switch (48dp target, never an optimistic flip).
+        // a11y: unlabelled, TalkBack announced only "On, switch" — no clue WHAT it
+        // controls. Name it "Auto-Login" and describe its real state (the in-flight case
+        // reads "Connecting", not a stale on/off) so the control is self-describing.
         Switch(
             checked = serviceEnabled,
             onCheckedChange = onToggle,
             enabled = !toggleInFlight,
+            modifier = Modifier.semantics {
+                contentDescription = "Auto-Login"
+                stateDescription = when {
+                    toggleInFlight -> "Connecting"
+                    serviceEnabled -> "On"
+                    else -> "Off"
+                }
+            },
         )
         Spacer(Modifier.width(16.dp))
 
@@ -305,7 +319,11 @@ fun AccountHeader(
                     // this the text consumed all the width and `Modifier.size(14.dp)` was
                     // coerced into the 0-width slot left over — the attention icon silently
                     // vanished in the exact (OFFLINE_RETRYING) state it exists to flag.
-                    modifier = Modifier.weight(1f, fill = false),
+                    // liveRegion(Polite): a status change (Connecting→Connected, or dropping
+                    // to Offline) was a silent redraw; now TalkBack speaks the new status.
+                    modifier = Modifier
+                        .weight(1f, fill = false)
+                        .semantics { liveRegion = LiveRegionMode.Polite },
                 )
                 if (showWarnIcon) {
                     Spacer(Modifier.width(6.dp))
@@ -553,7 +571,9 @@ fun MediaRow(
     trailing: (@Composable () -> Unit)? = null,
     compact: Boolean = false,
     onClick: (() -> Unit)? = null,
+    onClickLabel: String? = null,
     onLongClick: (() -> Unit)? = null,
+    onLongClickLabel: String? = null,
 ) {
     val cs = MaterialTheme.colorScheme
     val minH = if (compact) 48.dp else 72.dp
@@ -562,9 +582,15 @@ fun MediaRow(
         .fillMaxWidth()
         .then(
             if (clickable) {
+                // a11y: a screen-reader user cannot discover a long-press gesture, so the
+                // action MUST be named. `onClickLabel` announces what a tap does and
+                // `onLongClickLabel` surfaces the long-press as a named, invokable action
+                // in TalkBack (e.g. "Remove login") instead of a hidden gesture.
                 Modifier.combinedClickable(
                     onClick = onClick ?: {},
+                    onClickLabel = onClickLabel,
                     onLongClick = onLongClick,
+                    onLongClickLabel = onLongClickLabel,
                 )
             } else {
                 Modifier
@@ -635,8 +661,15 @@ fun StatusLine(kind: StatusKind, text: String, modifier: Modifier = Modifier) {
             icon = Icons.Rounded.ErrorOutline; color = cs.error
         }
     }
+    // A StatusLine appears/changes as a dynamic result (a mint/egress failure, a submit
+    // outcome). Untagged it was a silent redraw a screen-reader user never heard. As a
+    // live region TalkBack speaks it when it shows: an Error interrupts (Assertive), every
+    // other kind waits its turn (Polite).
+    val live = if (kind == StatusKind.Error) LiveRegionMode.Assertive else LiveRegionMode.Polite
     Row(
-        modifier.padding(vertical = 8.dp),
+        modifier
+            .semantics { liveRegion = live }
+            .padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(16.dp))
@@ -933,7 +966,9 @@ fun SiteLogo(domain: String, size: Int = 44, warning: Boolean = false) {
             Icon(
                 Icons.Rounded.PriorityHigh,
                 contentDescription = "Not supported yet",
-                tint = Color.White,
+                // Per-theme glyph: WHITE on the light dark-ochre fill, a DARK ink on the
+                // dark-mode amber. A single white glyph was 1.95:1 on the amber — invisible.
+                tint = LocalExtendedColors.current.onWarningBadge,
                 modifier = Modifier.size((badge * 0.7f).dp),
             )
         }

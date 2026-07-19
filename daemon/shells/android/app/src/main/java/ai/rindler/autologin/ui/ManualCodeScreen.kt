@@ -16,6 +16,8 @@ import ai.rindler.autologin.BuildConfig
 import ai.rindler.autologin.CodeSubmitResult
 import ai.rindler.autologin.KeystoreSecretSource
 import ai.rindler.autologin.submitOtpCode
+import android.content.Context
+import android.view.accessibility.AccessibilityManager
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
@@ -34,10 +36,17 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+
+/** True when a screen reader (TalkBack) drives the UI — touch exploration is on. */
+private fun screenReaderActive(context: Context): Boolean {
+    val am = context.getSystemService(Context.ACCESSIBILITY_SERVICE) as? AccessibilityManager
+    return am?.isTouchExplorationEnabled == true
+}
 
 private sealed interface SubmitState {
     data object Idle : SubmitState
@@ -88,6 +97,7 @@ fun ManualCodeScreen(
     onDone: () -> Unit,
 ) {
     val cs = MaterialTheme.colorScheme
+    val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     // rememberSaveable: a half-typed code must survive a device rotation mid-entry — that
     // rotation lands in the middle of a time-critical 2FA window, and a dropped code forces
@@ -97,10 +107,13 @@ fun ManualCodeScreen(
     var code by rememberSaveable { mutableStateOf("") }
     var state by remember { mutableStateOf<SubmitState>(SubmitState.Idle) }
 
-    // After a successful send, hold "Sent" on screen for a beat, then close.
+    // After a successful send, hold "Sent" on screen for a beat, then close. The success
+    // StatusLine is a Polite live region, but at 1000ms the screen auto-closes before
+    // TalkBack finishes speaking it, so a screen-reader user never hears the success. When
+    // touch exploration is on, hold ~3x longer so the announcement lands before the close.
     LaunchedEffect(state) {
         if (state is SubmitState.Success) {
-            delay(1000)
+            delay(if (screenReaderActive(ctx)) 3000 else 1000)
             onDone()
         }
     }

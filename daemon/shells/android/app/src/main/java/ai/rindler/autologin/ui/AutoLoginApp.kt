@@ -3,6 +3,8 @@ package ai.rindler.autologin.ui
 import ai.rindler.autologin.BuildConfig
 import ai.rindler.autologin.KeystoreSecretSource
 import ai.rindler.autologin.RelayService
+import ai.rindler.autologin.ui.theme.LocalReducedMotion
+import ai.rindler.autologin.ui.theme.MotionTokens
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.SizeTransform
@@ -72,6 +74,8 @@ fun AutoLoginApp(
     onEnrollConsumed: () -> Unit = {},
 ) {
     val ctx = LocalContext.current
+    // Reduced-motion (OS animator scale 0): the nav slide becomes a plain cross-fade.
+    val reduced = LocalReducedMotion.current
     // rememberSaveable so a rotation keeps the current screen instead of resetting to the
     // start (§4d). The initial `when` runs only on a first composition (no saved value);
     // on a recreate the saved Dest is restored via DestSaver.
@@ -212,10 +216,17 @@ fun AutoLoginApp(
         AnimatedContent(
             targetState = dest,
             transitionSpec = {
-                val dir = if (forward) 1 else -1
-                (slideInHorizontally(tween(320)) { w -> dir * w / 6 } + fadeIn(tween(260))) togetherWith
-                    (slideOutHorizontally(tween(320)) { w -> -dir * w / 6 } + fadeOut(tween(200))) using
-                    SizeTransform(clip = false)
+                if (reduced) {
+                    // Reduced motion: honour it — no horizontal slide, just a quick
+                    // cross-fade (opacity is not motion).
+                    fadeIn(tween(MotionTokens.fast)) togetherWith
+                        fadeOut(tween(MotionTokens.fast)) using SizeTransform(clip = false)
+                } else {
+                    val dir = if (forward) 1 else -1
+                    (slideInHorizontally(tween(320)) { w -> dir * w / 6 } + fadeIn(tween(260))) togetherWith
+                        (slideOutHorizontally(tween(320)) { w -> -dir * w / 6 } + fadeOut(tween(200))) using
+                        SizeTransform(clip = false)
+                }
             },
             label = "nav",
             modifier = Modifier.background(MaterialTheme.colorScheme.background),

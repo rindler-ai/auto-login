@@ -44,7 +44,19 @@ val LightError = Color(0xFFB93B33)
 // ── Extended (non-M3) semantic tokens ───────────────────────────────────────
 private val DarkWarning = Color(0xFFE3B341) // 9.5:1 as text on dark
 private val LightWarning = Color(0xFF8A6116) // ochre — amber-as-text always fails on light
-private val WarningBadge = Color(0xFFE3B341) // non-text icon badges only (≥3:1), both modes
+
+// Warning badge — the "!" overlay on an unsupported site tile. Both the badge fill (vs
+// its surface ring / page ground) AND the glyph on the fill must clear the ≥3:1 non-text
+// floor, in BOTH themes. A single shared amber fill with a white glyph failed both in
+// light (fill #E3B341 on Paper = 1.80:1; white glyph on amber = 1.95:1), so the fill and
+// glyph are tuned per theme (WCAG ratios verified in WarningBadgeContrastTest):
+//   Light: dark-ochre fill #8A6116 (5.10:1 on Paper) with a WHITE glyph (5.52:1 on fill).
+//   Dark:  amber fill #E3B341 (9.54:1 on the dark canvas) with a DARK glyph — the canvas
+//          colour DarkSurface punched through the amber (9.54:1), never white (1.95:1).
+private val LightWarningBadge = Color(0xFF8A6116)
+private val LightOnWarningBadge = Color(0xFFFFFFFF)
+private val DarkWarningBadge = Color(0xFFE3B341)
+private val DarkOnWarningBadge = DarkSurface // #101413 — amber punched to the canvas
 
 /**
  * Colors that Material's [androidx.compose.material3.ColorScheme] has no slot for.
@@ -53,19 +65,22 @@ private val WarningBadge = Color(0xFFE3B341) // non-text icon badges only (≥3:
  */
 data class ExtendedColors(
     val warning: Color, // dark #E3B341 · light TEXT #8A6116
-    val warningBadge: Color, // #E3B341 both modes — non-text icon badges only (≥3:1)
+    val warningBadge: Color, // badge FILL: light #8A6116 · dark #E3B341 (each ≥3:1 vs ground)
+    val onWarningBadge: Color, // badge GLYPH: light WHITE · dark #101413 (each ≥3:1 on fill)
     val statusConnected: Color, // aliases primary in both modes
 )
 
 val DarkExtendedColors = ExtendedColors(
     warning = DarkWarning,
-    warningBadge = WarningBadge,
+    warningBadge = DarkWarningBadge,
+    onWarningBadge = DarkOnWarningBadge,
     statusConnected = DarkPrimary,
 )
 
 val LightExtendedColors = ExtendedColors(
     warning = LightWarning,
-    warningBadge = WarningBadge,
+    warningBadge = LightWarningBadge,
+    onWarningBadge = LightOnWarningBadge,
     statusConnected = LightPrimary,
 )
 
