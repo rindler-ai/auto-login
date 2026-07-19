@@ -12,8 +12,8 @@ import (
 // ws->http, exactly like the pairing URL.
 func TestRevokeURLFromHub(t *testing.T) {
 	cases := []struct{ hub, want string }{
-		{"wss://mcp.rindler.ai/v1/devices/connect", "https://mcp.rindler.ai/devices/revoke-self"},
-		{"wss://web-17355.onporter.run/v1/devices/connect", "https://web-17355.onporter.run/devices/revoke-self"},
+		{"wss://your-hub.example/v1/devices/connect", "https://your-hub.example/devices/revoke-self"},
+		{"wss://hub2.example/v1/devices/connect", "https://hub2.example/devices/revoke-self"},
 		{"ws://localhost:8080/v1/devices/connect", "http://localhost:8080/devices/revoke-self"},
 		{"ws://127.0.0.1:8080/v1/devices/connect", "http://127.0.0.1:8080/devices/revoke-self"},
 	}
@@ -95,7 +95,7 @@ func TestRevokeSelf_Errors(t *testing.T) {
 	// The request carries the long-lived device token, so a cleartext ws:// to a
 	// REMOTE host is refused by the same rule that guards the relay channel.
 	t.Run("cleartext ws:// to a remote host is refused", func(t *testing.T) {
-		if err := RevokeSelf(context.Background(), "ws://mcp.rindler.ai/v1/devices/connect", "cd_dev_x"); err == nil {
+		if err := RevokeSelf(context.Background(), "ws://your-hub.example/v1/devices/connect", "cd_dev_x"); err == nil {
 			t.Error("plaintext ws:// to a remote hub must be refused")
 		}
 	})
