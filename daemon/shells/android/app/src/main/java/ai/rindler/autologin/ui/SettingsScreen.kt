@@ -141,20 +141,30 @@ fun SettingsScreen(
 
         // 6. Manage — the only place saved-row dividers survive (InsetDivider 56dp).
         SectionHeader("MANAGE")
-        SettingRow(
-            leading = Icons.Rounded.Sync,
-            title = "Pair this phone again",
-            trailing = RowTrailing.Chevron,
-            onClick = onRepair,
-        )
-        InsetDivider(56.dp)
-        SettingRow(
-            leading = Icons.Rounded.Tune,
-            title = "Advanced",
-            trailing = RowTrailing.Chevron,
-            onClick = onAdvanced,
-        )
-        InsetDivider(56.dp)
+        // Re-pair and Advanced exist ONLY for self-hosters. Someone signed in with a
+        // Rindler account has no use for either: their server is fixed, and the way to
+        // move to their own is to sign out and take "Use a self-hosted server" on the
+        // sign-in screen. Showing them here offered a pointless choice and, in
+        // Advanced's case, put the operator's own endpoint on screen.
+        //
+        // Self-hosted == the stored server differs from the one compiled into the build.
+        val selfHosted = store.hubUrl()?.let { it != BuildConfig.HUB_URL } ?: false
+        if (selfHosted) {
+            SettingRow(
+                leading = Icons.Rounded.Sync,
+                title = "Pair this phone again",
+                trailing = RowTrailing.Chevron,
+                onClick = onRepair,
+            )
+            InsetDivider(56.dp)
+            SettingRow(
+                leading = Icons.Rounded.Tune,
+                title = "Advanced",
+                trailing = RowTrailing.Chevron,
+                onClick = onAdvanced,
+            )
+            InsetDivider(56.dp)
+        }
         SettingRow(
             leading = Icons.Rounded.Policy,
             title = "Privacy policy",
