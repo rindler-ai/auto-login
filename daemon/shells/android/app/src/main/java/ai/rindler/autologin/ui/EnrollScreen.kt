@@ -36,6 +36,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
@@ -173,6 +175,12 @@ fun EnrollScreen(store: KeystoreSecretSource, onDone: () -> Unit) {
             AppTextField(
                 password, { password = it }, "Password",
                 visualTransformation = if (pwVisible) VisualTransformation.None else PasswordVisualTransformation(),
+            // Without an explicit Password keyboard the IME treats this as ordinary prose,
+            // so predictive text can LEARN the user's site password and later suggest it.
+            keyboardOptions = KeyboardOptions(
+                keyboardType = KeyboardType.Password,
+                autoCorrectEnabled = false,
+            ),
                 trailingIcon = {
                     IconButton(onClick = { pwVisible = !pwVisible }) {
                         Icon(

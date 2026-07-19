@@ -290,7 +290,18 @@ fun AccountHeader(
         // RIGHT — 40dp avatar in a 48dp tap target → Settings.
         val avatarBox = Modifier
             .size(48.dp)
-            .then(if (onOpenSettings != null) Modifier.clickable(onClick = onOpenSettings) else Modifier)
+            .then(
+                // A screen reader had NOTHING to announce here: the avatar is the only route
+                // to Settings, and Settings is the only place Sign out lives, so an
+                // unlabelled target meant a blind user could not sign out at all.
+                if (onOpenSettings != null) {
+                    Modifier
+                        .clickable(onClickLabel = "Open settings", onClick = onOpenSettings)
+                        .semantics { contentDescription = "Account and settings" }
+                } else {
+                    Modifier
+                },
+            )
         Box(avatarBox, contentAlignment = Alignment.Center) {
             if (email == null) {
                 IconBadge(Icons.Rounded.Shield, 40.dp)

@@ -28,6 +28,8 @@ import android.os.Build
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Battery5Bar
 import androidx.compose.material.icons.rounded.Notifications
@@ -44,6 +46,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
@@ -363,7 +366,12 @@ fun EgressToggle(store: KeystoreSecretSource) {
                 // running a "server"/"proxy" or reselling access do not squarely apply, and
                 // an account-suspension warning was disproportionate to what actually happens.
                 Text(
-                    "When on, Auto-Login sends your own agent's web traffic through this phone's " +
+                    // M3 AlertDialog CLIPS an over-long text slot instead of scrolling it,
+                    // so at a large font scale the bottom of this disclosure simply vanished
+                    // while "Turn on" stayed tappable. Consent the user cannot read is not
+                    // consent, so the body scrolls.
+                    modifier = Modifier.verticalScroll(rememberScrollState()),
+                    text = "When on, Auto-Login sends your own agent's web traffic through this phone's " +
                         "internet connection. Sites you automate will see this phone's IP address " +
                         "instead of the server's.\n\n" +
                         "Only your own sessions use it. Your connection is never shared with anyone " +
