@@ -11,7 +11,9 @@
 
 package ai.rindler.autologin.email
 
+import ai.rindler.autologin.CodeNeededNotifier
 import ai.rindler.autologin.KeystoreSecretSource
+import ai.rindler.autologin.shouldPromptForEmail
 import android.content.Context
 
 object EmailCodeExpectationSink {
@@ -19,8 +21,19 @@ object EmailCodeExpectationSink {
     fun onExpectingEmailCode(app: Context, site: String, ttlSeconds: Long) {
         val ctx = app.applicationContext
         val store = KeystoreSecretSource(ctx)
-        // Opted out, or no durable mailbox linked -> never open a mailbox (fail closed).
-        if (!store.isEmailAutoReadEnabled() || !store.isEmailLinked()) return
+        // Whether email auto-read CAN serve: opted in AND at least one mailbox linked. Read
+        // HERE (Android) and reduced to the pure shouldPromptForEmail decision so the
+        // prompt-or-not is unit-tested. (linkedEmails().isNotEmpty() == isEmailLinked().)
+        val enabled = store.isEmailAutoReadEnabled()
+        val linkedCount = store.linkedEmails().size
+        if (shouldPromptForEmail(enabled, linkedCount)) {
+            // Can't serve — auto-read off, or the correct email isn't linked. The armed
+            // reader (below) would poll nothing, so the login stalls silently: nudge the
+            // user to link their email or enter the code by hand. Then fail closed: never
+            // open a mailbox.
+            CodeNeededNotifier.notifyEmailCodeNeeded(ctx)
+            return
+        }
         val generation = EmailExpectation.arm(ctx, ttlSeconds)
         MailboxReader.kick(ctx, site, generation)
     }

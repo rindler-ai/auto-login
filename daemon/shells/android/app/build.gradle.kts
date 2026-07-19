@@ -16,7 +16,7 @@ android {
         // is running it, so the number tracks "not shipped yet" rather than counting
         // up through fixes. versionCode still increments — the release gate requires
         // it to be strictly monotonic, and 17 was the email-OTP-linking predecessor.
-        versionCode = 19
+        versionCode = 20
         versionName = "0.1.0"
 
         // Backend URLs are build params. The DEFAULTS here are PROD (a plain
