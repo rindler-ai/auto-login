@@ -166,6 +166,6 @@ private fun ColumnScope.SetupBody(store: KeystoreSecretSource) {
     SmsAutoReadToggle(store)
     BatteryToggle()
     EgressToggle(store)
-    NotificationToggle() // self-hides when there is nothing left to ask for
+    NotificationToggle() // hidden only below SDK 33, where the permission does not exist
     Spacer(Modifier.height(8.dp))
 }

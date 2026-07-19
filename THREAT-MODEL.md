@@ -61,7 +61,12 @@ from the mailbox or message, then relays only the resulting **code**. The only
 durable value that ever transits is the password, and only inside the sealed
 envelope below, held in memory and discarded after the login.
 
-### 3. End-to-end sealing to the worker (the hub cannot read secrets)
+### 3. End-to-end sealing to the worker (the hub cannot read durable secrets)
+
+> Scope note: this section covers passwords, usernames, and app-generated (TOTP)
+> codes. SMS and manually typed one-time codes do NOT ride the sealed lane — they
+> are POSTed to the hub over TLS so it can route them to the waiting login, so the
+> hub does see those short-lived codes.
 
 Each released secret is sealed with **HPKE (RFC 9180 base mode:
 DHKEM-X25519-HKDF-SHA256 + HKDF-SHA256 + AES-256-GCM)** to the login worker's
@@ -190,8 +195,11 @@ These are real limitations. The design does not claim to defend against them.
 - **One-time-code delivery outside the app.** SMS and email codes are delivered by
   third parties before the device reads them; interception upstream (SIM swap,
   mailbox compromise) is outside this model. Neither platform permits silent
-  third-party OTP reading, so a code capture is always user-visible, and manual
-  entry is always available as the reliability floor.
+  third-party OTP reading on iOS, so capture there is user-visible. On **Android**
+  this app holds `RECEIVE_SMS` and reads matching texts silently in the background
+  (gated on an explicit opt-in, and only while a sign-in is waiting), so capture is
+  NOT individually user-visible on that platform. Manual entry is always available
+  as the reliability floor.
 - **Metadata to the hub.** As noted above, the hub necessarily learns login
   timing, site, and the device's served domains. This is not a confidentiality
   leak of secrets, but it is observable activity.

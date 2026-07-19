@@ -36,6 +36,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
@@ -100,7 +102,7 @@ fun EnrollScreen(store: KeystoreSecretSource, onDone: () -> Unit) {
         Column(Modifier.padding(horizontal = 16.dp)) {
             Spacer(Modifier.height(4.dp))
             Text(
-                "Stored encrypted on this phone. When one of your sign-ins needs it, the credential is released automatically — end-to-end encrypted for that one login, only to a verified request.",
+                "Stored encrypted on this phone. When one of your sign-ins needs it, your phone releases it automatically — end-to-end encrypted for that one login, only to a verified request.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = cs.onSurfaceVariant,
             )
@@ -131,7 +133,7 @@ fun EnrollScreen(store: KeystoreSecretSource, onDone: () -> Unit) {
         AnimatedVisibility(showRequestMapping) {
             SuggestionBox {
                 MediaRow(
-                    title = if (alreadyRequested) "Requested — we'll add it soon" else "Request site mapping",
+                    title = if (alreadyRequested) "Requested — we'll work on adding it" else "Ask us to support this site",
                     compact = true,
                     leading = {
                         Box(
@@ -173,6 +175,12 @@ fun EnrollScreen(store: KeystoreSecretSource, onDone: () -> Unit) {
             AppTextField(
                 password, { password = it }, "Password",
                 visualTransformation = if (pwVisible) VisualTransformation.None else PasswordVisualTransformation(),
+            // Without an explicit Password keyboard the IME treats this as ordinary prose,
+            // so predictive text can LEARN the user's site password and later suggest it.
+            keyboardOptions = KeyboardOptions(
+                keyboardType = KeyboardType.Password,
+                autoCorrectEnabled = false,
+            ),
                 trailingIcon = {
                     IconButton(onClick = { pwVisible = !pwVisible }) {
                         Icon(

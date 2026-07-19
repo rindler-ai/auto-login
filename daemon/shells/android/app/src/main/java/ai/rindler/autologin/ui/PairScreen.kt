@@ -50,8 +50,15 @@ fun PairScreen(onAdvanced: () -> Unit) {
         )
         Spacer(Modifier.height(12.dp))
         Text(
-            "You'll finish signing in with your browser, then this phone is linked to your " +
-                "Rindler account. We only ever see your email — never your saved passwords.",
+            // Do NOT restore an "we only ever see X / never Y" absolute here. The previous
+            // wording claimed we only ever see the email, on the screen immediately before
+            // the user types their Rindler password into a browser — while the app in fact
+            // also receives their account photo and this phone's name, and saved passwords
+            // do leave the phone (sealed) during a sign-in. Say what is actually shared.
+            "You'll finish signing in with your browser, which links this phone to your " +
+                "Rindler account. That shares your account details: your email, your photo, " +
+                "and this phone's name. The site passwords you save here stay encrypted on " +
+                "this phone, and our servers can't read them.",
             style = MaterialTheme.typography.bodyMedium,
             color = cs.onSurfaceVariant,
             textAlign = TextAlign.Center,
@@ -68,7 +75,7 @@ fun PairScreen(onAdvanced: () -> Unit) {
         )
         AnimatedVisibility(failed) {
             Column(Modifier.padding(horizontal = 16.dp)) {
-                StatusLine(StatusKind.Error, "Couldn't open your browser. Try again.")
+                StatusLine(StatusKind.Error, "Couldn't open a browser. Check that you have one installed and enabled, then try again.")
             }
         }
         Spacer(Modifier.weight(1f))

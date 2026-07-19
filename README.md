@@ -81,7 +81,8 @@ You can also **enter a code manually** ("Enter a code instead"):
 1. Mint a single-use pairing code in your hub's device console
    (`https://your-hub.example/settings/devices`).
 2. Enter the code (and your hub URL) in the app. The device generates a long-lived
-   Ed25519 signing key that stays non-exportable in the OS keychain / secure enclave,
+   Ed25519 signing key, stored encrypted at rest under a hardware-backed keystore
+   master key (it is software key material, not an enclave-resident key),
    and POSTs only its **public** key to `https://your-hub.example/devices/pair/complete`.
 3. The server returns a device token and its **ping-signing public key**. The
    device verifies that key against a fingerprint bound into the pairing code
