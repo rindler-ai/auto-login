@@ -1,12 +1,17 @@
 package ai.rindler.autologin.ui
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Shield
 import androidx.compose.material3.MaterialTheme
@@ -34,51 +39,71 @@ fun PairScreen(onAdvanced: () -> Unit) {
     val ctx = LocalContext.current
     var failed by remember { mutableStateOf(false) }
     val cs = MaterialTheme.colorScheme
+    val scroll = rememberScrollState()
 
     Column(
         Modifier.fillMaxSize(),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Spacer(Modifier.weight(1f))
-        IconBadge(Icons.Rounded.Shield, 72.dp)
-        Spacer(Modifier.height(40.dp))
-        Text(
-            "Sign in to Rindler",
-            style = MaterialTheme.typography.headlineMedium,
-            color = cs.onBackground,
-            textAlign = TextAlign.Center,
-        )
-        Spacer(Modifier.height(12.dp))
-        Text(
-            // Do NOT restore an "we only ever see X / never Y" absolute here. The previous
-            // wording claimed we only ever see the email, on the screen immediately before
-            // the user types their Rindler password into a browser — while the app in fact
-            // also receives their account photo and this phone's name, and saved passwords
-            // do leave the phone (sealed) during a sign-in. Say what is actually shared.
-            "You'll finish signing in with your browser, which links this phone to your " +
-                "Rindler account. That shares your account details: your email, your photo, " +
-                "and this phone's name. The site passwords you save here stay encrypted on " +
-                "this phone, and our servers can't read them.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = cs.onSurfaceVariant,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.padding(horizontal = 32.dp),
-        )
-        Spacer(Modifier.height(32.dp))
-        PrimaryButton(
-            text = "Sign in",
-            onClick = {
-                failed = false
-                if (!openSignInEnroll(ctx)) failed = true
-            },
-            modifier = Modifier.padding(horizontal = 16.dp),
-        )
-        AnimatedVisibility(failed) {
-            Column(Modifier.padding(horizontal = 16.dp)) {
-                StatusLine(StatusKind.Error, "Couldn't open a browser. Check that you have one installed and enabled, then try again.")
+        // The hero + "Sign in" block scrolls when it does not fit (a large font scale), so
+        // the single sign-in action — on the FIRST screen every user meets — can never be
+        // pushed off screen. It stays vertically centred while it fits (Arrangement.Center
+        // over a min height of one viewport), the same idiom AppScreen uses. The self-hosted
+        // link and trust footer stay pinned below the scroll region.
+        BoxWithConstraints(
+            Modifier
+                .weight(1f)
+                .fillMaxWidth(),
+        ) {
+            val minH = maxHeight
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(scroll)
+                    .heightIn(min = minH),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center,
+            ) {
+                IconBadge(Icons.Rounded.Shield, 72.dp)
+                Spacer(Modifier.height(40.dp))
+                Text(
+                    "Sign in to Rindler",
+                    style = MaterialTheme.typography.headlineMedium,
+                    color = cs.onBackground,
+                    textAlign = TextAlign.Center,
+                )
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    // Do NOT restore an "we only ever see X / never Y" absolute here. The previous
+                    // wording claimed we only ever see the email, on the screen immediately before
+                    // the user types their Rindler password into a browser — while the app in fact
+                    // also receives their account photo and this phone's name, and saved passwords
+                    // do leave the phone (sealed) during a sign-in. Say what is actually shared.
+                    "You'll finish signing in with your browser, which links this phone to your " +
+                        "Rindler account. That shares your account details: your email, your photo, " +
+                        "and this phone's name. The site passwords you save here stay encrypted on " +
+                        "this phone, and our servers can't read them.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = cs.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(horizontal = 32.dp),
+                )
+                Spacer(Modifier.height(32.dp))
+                PrimaryButton(
+                    text = "Sign in",
+                    onClick = {
+                        failed = false
+                        if (!openSignInEnroll(ctx)) failed = true
+                    },
+                    modifier = Modifier.padding(horizontal = 16.dp),
+                )
+                AnimatedVisibility(failed) {
+                    Column(Modifier.padding(horizontal = 16.dp)) {
+                        StatusLine(StatusKind.Error, "Couldn't open a browser. Check that you have one installed and enabled, then try again.")
+                    }
+                }
             }
         }
-        Spacer(Modifier.weight(1f))
         TextButton(onClick = onAdvanced) {
             Text(
                 "Use a self-hosted server",

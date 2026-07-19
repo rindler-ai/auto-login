@@ -7,18 +7,22 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Bolt
 import androidx.compose.material.icons.rounded.CloudOff
@@ -110,31 +114,39 @@ fun OnboardingScreen(onDone: () -> Unit) {
             }
         }
 
-        // The pager carries ONLY illustration + text; dots + CTA are fixed chrome.
+        // The pager carries ONLY illustration + text; dots + CTA are fixed chrome. Each
+        // slide scrolls when its body copy does not fit (long copy at ~1.3 font scale on a
+        // narrow phone clipped unreadably before), staying vertically centred while it fits
+        // (Arrangement.Center over a min height of one page), the idiom AppScreen uses.
         HorizontalPager(state = pager, modifier = Modifier.weight(1f)) { page ->
             val s = slides[page]
-            Column(
-                Modifier.fillMaxSize(),
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                Spacer(Modifier.weight(1f))
-                OnboardingArt(s.icon)
-                Spacer(Modifier.height(32.dp))
-                Text(
-                    s.title,
-                    style = MaterialTheme.typography.headlineMedium,
-                    color = cs.onBackground,
-                    textAlign = TextAlign.Center,
-                )
-                Spacer(Modifier.height(12.dp))
-                Text(
-                    s.body,
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = cs.onSurfaceVariant,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.padding(horizontal = 32.dp),
-                )
-                Spacer(Modifier.weight(1f))
+            BoxWithConstraints(Modifier.fillMaxSize()) {
+                val minH = maxHeight
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState())
+                        .heightIn(min = minH),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center,
+                ) {
+                    OnboardingArt(s.icon)
+                    Spacer(Modifier.height(32.dp))
+                    Text(
+                        s.title,
+                        style = MaterialTheme.typography.headlineMedium,
+                        color = cs.onBackground,
+                        textAlign = TextAlign.Center,
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    Text(
+                        s.body,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = cs.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(horizontal = 32.dp),
+                    )
+                }
             }
         }
 
