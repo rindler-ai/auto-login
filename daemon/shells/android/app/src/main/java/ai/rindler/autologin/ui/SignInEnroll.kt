@@ -34,14 +34,22 @@ fun parseEnrollUri(uri: Uri?): EnrollRequest? {
 }
 
 /** Open the sign-in enrollment page in a Custom Tab. */
-fun openSignInEnroll(context: Context) {
+// Returns false if no browser could be launched (no browser installed, or a
+// disabled/broken default) so the caller can show a fallback instead of failing
+// silently. A browser that opens but can't reach the page ("site can't be reached")
+// is the browser's own error surface, not catchable here.
+fun openSignInEnroll(context: Context): Boolean {
     val url = Uri.parse(BuildConfig.AUTHORIZE_URL).buildUpon()
         .path("/devices/authorize")
         .appendQueryParameter("scheme", ENROLL_SCHEME)
         .appendQueryParameter("name", deviceName())
         .build()
-    val tab = CustomTabsIntent.Builder().setShowTitle(true).build()
-    tab.launchUrl(context, url)
+    return try {
+        CustomTabsIntent.Builder().setShowTitle(true).build().launchUrl(context, url)
+        true
+    } catch (_: Exception) {
+        false
+    }
 }
 
 /**
@@ -88,10 +96,10 @@ fun friendlyPairError(raw: String?): String = when {
     // Pairing-channel TOFU: the server key at pair/complete did not match the
     // fingerprint in the code — a possible on-path MITM.
     raw.contains("could not verify the hub's identity") ->
-        "This device couldn't verify the hub's identity. You may be on an untrusted network. Try again from a trusted connection."
+        "This device couldn't verify the server's identity. You may be on an untrusted network. Try again from a trusted connection."
     raw.contains("401") || raw.contains("invalid") ->
         "That code didn't work. It may have expired, so generate a new one."
     raw.contains("timeout") || raw.contains("connect") ->
-        "Couldn't reach the hub. Check your connection and retry."
+        "Couldn't reach the server. Check your connection and retry."
     else -> "Couldn't pair. Generate a fresh code and try again."
 }
