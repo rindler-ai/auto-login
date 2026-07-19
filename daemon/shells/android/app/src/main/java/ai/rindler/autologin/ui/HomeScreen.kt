@@ -228,7 +228,7 @@ private fun StatusCard(active: Boolean, onToggle: () -> Unit) {
                         color = cs.onSurface,
                     )
                     Text(
-                        if (active) "Your logins are ready when the hub needs them"
+                        if (active) "Your logins are ready when the server needs them"
                         else "Sign-ins are paused until you resume",
                         style = MaterialTheme.typography.bodyMedium,
                         color = cs.onSurfaceVariant,

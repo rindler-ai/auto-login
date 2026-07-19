@@ -98,7 +98,7 @@ fun ManualCodeScreen(
                 CodeSubmitResult.UNAUTHORIZED ->
                     SubmitState.Failed("This device's pairing looks invalid. Re-pair in Settings, then try again.")
                 CodeSubmitResult.FAILED ->
-                    SubmitState.Failed("Couldn't reach the hub. Check your connection and try again.")
+                    SubmitState.Failed("Couldn't reach the server. Check your connection and try again.")
             }
         }
     }

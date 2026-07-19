@@ -67,7 +67,7 @@ private val slides = listOf(
     Slide(
         Icons.Rounded.Shield,
         "Stored on your phone",
-        "Credentials are encrypted at rest in this device's secure storage. The hub doesn't keep a hosted credential copy.",
+        "Credentials are encrypted at rest in this device's secure storage. The server doesn't keep a hosted credential copy.",
     ),
     Slide(
         Icons.Rounded.Bolt,
@@ -77,7 +77,7 @@ private val slides = listOf(
     Slide(
         Icons.Rounded.CloudOff,
         "Only for a verified request",
-        "Your phone releases a credential only to a request it cryptographically verifies is from the hub — for your account and that exact sign-in — sealed end-to-end to that login's single-use key so the hub can never read it.",
+        "Your phone releases a credential only to a request it cryptographically verifies is from the server — for your account and that exact sign-in — sealed end-to-end to that login's single-use key so the server can never read it.",
     ),
 )
 
