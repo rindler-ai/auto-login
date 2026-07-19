@@ -3,23 +3,20 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- "Tap Ripple": a fingertip point radiating two concentric ripples — one tap
-         and you're in. Off-white on near-black; the whole mark sits inside the 66%
-         adaptive safe zone (outer ripple reaches ~31.5 units from center). -->
-    <!-- outer ripple (faintest) -->
+    <!-- "Brass & Ivory" minimalist padlock: brass shackle behind, ivory body on top,
+         navy keyhole dot. All geometry sits inside the 66% adaptive safe zone. -->
+    <!-- brass shackle (drawn first, under the body) -->
     <path
-        android:pathData="M54,25 A29,29 0 1,1 54,83 A29,29 0 1,1 54,25"
-        android:strokeColor="#F5F5F7"
-        android:strokeWidth="5"
-        android:strokeAlpha="0.42" />
-    <!-- inner ripple -->
+        android:pathData="M41.5,51 V44.5 A12.5,12.5 0 0 1 66.5,44.5 V51"
+        android:strokeColor="#D9B36B"
+        android:strokeWidth="9.5"
+        android:strokeLineCap="round" />
+    <!-- ivory body (rounded rect x33.5 y47 w41 h32.5 r10) -->
     <path
-        android:pathData="M54,34 A20,20 0 1,1 54,74 A20,20 0 1,1 54,34"
-        android:strokeColor="#F5F5F7"
-        android:strokeWidth="6"
-        android:strokeAlpha="0.85" />
-    <!-- fingertip point -->
+        android:fillColor="#F6F7FB"
+        android:pathData="M43.5,47 L64.5,47 A10,10 0 0 1 74.5,57 L74.5,69.5 A10,10 0 0 1 64.5,79.5 L43.5,79.5 A10,10 0 0 1 33.5,69.5 L33.5,57 A10,10 0 0 1 43.5,47 Z" />
+    <!-- navy keyhole dot -->
     <path
-        android:pathData="M54,43 A11,11 0 1,1 54,65 A11,11 0 1,1 54,43 Z"
-        android:fillColor="#F5F5F7" />
+        android:fillColor="#1E2340"
+        android:pathData="M54,56.5 A5.5,5.5 0 1 1 54,67.5 A5.5,5.5 0 1 1 54,56.5 Z" />
 </vector>

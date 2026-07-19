@@ -38,7 +38,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 
-private enum class Dest { Onboarding, Pair, Completing, Home, Enroll, Settings, ManualCode }
+private enum class Dest { Onboarding, Pair, Completing, Home, Enroll, Settings, ManualCode, Advanced }
 
 @Composable
 fun AutoLoginApp(
@@ -89,6 +89,7 @@ fun AutoLoginApp(
     // (an uninterruptible step) the handler is disabled so the system default applies.
     val backTarget: Dest? = when (dest) {
         Dest.Enroll, Dest.Settings, Dest.ManualCode -> Dest.Home
+        Dest.Advanced -> if (store.deviceToken() != null) Dest.Settings else Dest.Pair
         Dest.Pair -> if (store.deviceToken() != null) Dest.Home else null
         else -> null
     }
@@ -117,10 +118,7 @@ fun AutoLoginApp(
                     store.setOnboarded()
                     go(if (store.deviceToken() == null) Dest.Pair else Dest.Home)
                 })
-                Dest.Pair -> PairScreen(store = store, onPaired = {
-                    RelayService.ensureRunning(ctx)
-                    go(Dest.Home)
-                })
+                Dest.Pair -> PairScreen(onAdvanced = { go(Dest.Advanced) })
                 Dest.Completing -> CompletingScreen(
                     error = enrollError,
                     onRetry = { enrollError = null; go(Dest.Pair, isForward = false) },
@@ -136,8 +134,24 @@ fun AutoLoginApp(
                 Dest.Settings -> SettingsScreen(
                     store = store,
                     onBack = { go(Dest.Home, isForward = false) },
-                    onRepair = { go(Dest.Pair) },
+                    // A self-hoster (a non-default hub is stored) re-pairs against their
+                    // own server via Advanced, not the Rindler sign-in screen (P3).
+                    onRepair = { go(if (store.hubUrl() != null) Dest.Advanced else Dest.Pair) },
                     onReset = { go(Dest.Onboarding, isForward = false) },
+                    onAdvanced = { go(Dest.Advanced) },
+                )
+                Dest.Advanced -> AdvancedScreen(
+                    store = store,
+                    onPaired = {
+                        RelayService.ensureRunning(ctx)
+                        go(Dest.Home)
+                    },
+                    onBack = {
+                        go(
+                            if (store.deviceToken() != null) Dest.Settings else Dest.Pair,
+                            isForward = false,
+                        )
+                    },
                 )
             }
         }
