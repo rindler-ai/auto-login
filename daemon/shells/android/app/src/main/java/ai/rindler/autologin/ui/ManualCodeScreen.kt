@@ -31,6 +31,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
@@ -46,6 +47,41 @@ private sealed interface SubmitState {
     data class Failed(val message: String) : SubmitState
 }
 
+// The widest code the system ever recognizes. core/otp ExtractCode caps a mixed
+// alphanumeric code at 12 chars (alnumMaxLen); a digit code at 8. The auto-read path
+// can therefore never submit a code longer than 12, so the manual field caps there too
+// — long enough to never truncate a real code, short enough to guard against paste junk,
+// and kept in lockstep with the extractor so both paths agree on what a code can be.
+private const val MAX_CODE_LEN = 12
+
+/**
+ * Reduce raw text-field input to the EXACT alphabet a submitted code uses, so a typed
+ * code and an auto-read code reach the rendezvous byte-identically.
+ *
+ * The auto-read path forwards whatever core/otp ExtractCode returns, and that output is
+ * always ASCII [A-Za-z0-9] with every separator stripped and case preserved:
+ *   - grouped digit codes drop their space/hyphen  ("048 913"  -> "048913"),
+ *   - hyphen-grouped alphanumeric codes reassemble WITHOUT the hyphen
+ *       ("X7G2-9K1P" -> "X7G29K1P"),  [core/otp/extract_test.go "alnum-hyphen-grouped"]
+ *   - the alphanumeric matcher is \b[A-Za-z0-9]{4,12}\b and is CASE-PRESERVING
+ *       ("a1b2c3" stays "a1b2c3").    [core/otp/extract_test.go "alnum-lower"]
+ *
+ * So this: keeps ASCII letters and digits, drops everything else (spaces, hyphens, any
+ * punctuation, and — deliberately using explicit ASCII ranges rather than Kotlin's
+ * Unicode-aware isLetterOrDigit()/isDigit() — every non-ASCII letter/digit, emoji, and
+ * full-width/other-script digit that the extractor's ASCII regex would never match),
+ * does NOT change case (some sites' codes are case-sensitive; the extractor preserves
+ * case, so we must not force it), and caps at MAX_CODE_LEN.
+ *
+ * NOTE the ONE divergence from auto-read: a Google-style SMS body "G-4F2K9A" is extracted
+ * by ExtractCode as "4F2K9A" (it drops the lone "G-" prefix); a user who types "G-4F2K9A"
+ * verbatim here sanitizes to "G4F2K9A". Replicating the extractor's prefix/keyword
+ * heuristics is out of scope for a field with no surrounding prose to disambiguate — the
+ * user types the code characters they intend.
+ */
+fun sanitizeCodeInput(raw: String): String =
+    raw.filter { it in '0'..'9' || it in 'A'..'Z' || it in 'a'..'z' }.take(MAX_CODE_LEN)
+
 @Composable
 fun ManualCodeScreen(
     store: KeystoreSecretSource,
@@ -53,7 +89,12 @@ fun ManualCodeScreen(
 ) {
     val cs = MaterialTheme.colorScheme
     val scope = rememberCoroutineScope()
-    var code by remember { mutableStateOf("") }
+    // rememberSaveable: a half-typed code must survive a device rotation mid-entry — that
+    // rotation lands in the middle of a time-critical 2FA window, and a dropped code forces
+    // a re-read. The code is already visible on this FLAG_SECURE screen, so persisting it
+    // into the saved-instance bundle does not widen its exposure. Only the code field is
+    // saved; `state` stays transient (a mid-submit status should reset on recreate).
+    var code by rememberSaveable { mutableStateOf("") }
     var state by remember { mutableStateOf<SubmitState>(SubmitState.Idle) }
 
     // After a successful send, hold "Sent" on screen for a beat, then close.
@@ -105,7 +146,7 @@ fun ManualCodeScreen(
             AppTextField(
                 value = code,
                 onValueChange = { new ->
-                    code = new.filter { it.isDigit() }.take(10)
+                    code = sanitizeCodeInput(new)
                     // Clear a prior result on a fresh edit, but NEVER interrupt an
                     // in-flight submit (the field is locked below anyway) — resetting
                     // Submitting->Idle would defeat the re-entry guard and let a second
@@ -115,7 +156,14 @@ fun ManualCodeScreen(
                 label = "Verification code",
                 mono = true,
                 enabled = !submitting, // lock the field while the POST is in flight
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                // Codes are alphanumeric (e.g. "G4F2K9A"), so a number-only IME would make
+                // letters untypeable. Password type gives the full alphanumeric keyboard;
+                // autoCorrectEnabled=false stops autocorrect from mangling an opaque code
+                // and keeps it out of the keyboard's learning dictionary.
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Password,
+                    autoCorrectEnabled = false,
+                ),
             )
 
             Spacer(Modifier.height(4.dp))
