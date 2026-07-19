@@ -27,7 +27,7 @@ func newSystemBackend() (keyringBackend, error) {
 }
 
 func (linuxKeyring) set(account, secret string) error {
-	cmd := exec.Command("secret-tool", "store", "--label=Auto-Login",
+	cmd := exec.Command("secret-tool", "store", "--label=Auto Login",
 		"service", keyringService, "account", account)
 	cmd.Stdin = strings.NewReader(secret)
 	return cmd.Run()

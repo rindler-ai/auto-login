@@ -123,7 +123,7 @@ struct HomeView: View {
 
             Spacer().frame(width: 10)
 
-            Text("Auto-Login")
+            Text("Auto Login")
                 .autoLoginText(.titleLarge)
                 .foregroundStyle(AutoLoginColors.onBackground)
 
@@ -252,7 +252,7 @@ struct HomeView: View {
 
                 Spacer().frame(height: 8)
 
-                Text("Auto-Login won't be able to sign you in to \(site) until you add it again. The stored login is erased from this device.")
+                Text("Auto Login won't be able to sign you in to \(site) until you add it again. The stored login is erased from this device.")
                     .autoLoginText(.bodyMedium)
                     .foregroundStyle(AutoLoginColors.onSurfaceVariant)
                     .multilineTextAlignment(.center)
@@ -466,7 +466,7 @@ private struct EmptyLogins: View {
 
                 Spacer().frame(height: 4)
 
-                Text("Add a site and Auto-Login can sign you in whenever you\u{00A0}ask.")
+                Text("Add a site and Auto Login can sign you in whenever you\u{00A0}ask.")
                     .autoLoginText(.bodyMedium)
                     .foregroundStyle(AutoLoginColors.onSurfaceVariant)
                     .multilineTextAlignment(.center)

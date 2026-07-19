@@ -84,7 +84,7 @@ class KeystoreSecretSource(context: Context) : SecretSource {
             createEncryptedPrefs(context)
         } catch (e: Exception) {
             throw IllegalStateException(
-                "Auto-Login could not open OR reset its secure store; the device keystore is unusable.",
+                "Auto Login could not open OR reset its secure store; the device keystore is unusable.",
                 e,
             )
         }

@@ -50,7 +50,7 @@ password. The only non-entered string is the emulator's own generic device name
    adb exec-out screencap -p > docs/screenshots/<NN>-<name>.png
    ```
    Open every PNG and confirm it (a) renders the intended screen with no keyboard
-   covering it, (b) shows only fake/empty values, and (c) shows the **Auto-Login**
+   covering it, (b) shows only fake/empty values, and (c) shows the **Auto Login**
    name. Retake anything blank or mid-transition.
 
 ## Naming + which screens

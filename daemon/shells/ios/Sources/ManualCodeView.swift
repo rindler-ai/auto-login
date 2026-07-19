@@ -58,7 +58,7 @@ struct ManualCodeView: View {
 
                 Spacer().frame(height: 12)
 
-                Text("Type the code your login is waiting for — Auto-Login will submit it.")
+                Text("Type the code your login is waiting for — Auto Login will submit it.")
                     .autoLoginText(.bodyMedium)
                     .foregroundStyle(AutoLoginColors.onSurfaceVariant)
                     .frame(maxWidth: .infinity, alignment: .leading)

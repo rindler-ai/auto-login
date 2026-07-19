@@ -102,7 +102,7 @@ fun LinkedEmailsScreen(
         Column(Modifier.padding(horizontal = 16.dp)) {
             Spacer(Modifier.height(4.dp))
             Text(
-                "Auto-Login reads a sign-in code from these inboxes ON THIS DEVICE, only while " +
+                "Auto Login reads a sign-in code from these inboxes ON THIS DEVICE, only while " +
                     "a login is waiting for one. Your email password never leaves this phone and " +
                     "is never sent to our servers.",
                 style = MaterialTheme.typography.bodyMedium,
@@ -169,7 +169,7 @@ fun LinkedEmailsScreen(
             title = { Text("Remove this mailbox?") },
             text = {
                 Text(
-                    "Auto-Login will stop reading sign-in codes from $address on this phone. " +
+                    "Auto Login will stop reading sign-in codes from $address on this phone. " +
                         "The app-password is erased from this device — you can also delete it in " +
                         "your email provider's settings.",
                 )
@@ -219,7 +219,7 @@ private fun EmailAddForm(
         Column(Modifier.padding(horizontal = 16.dp)) {
             Spacer(Modifier.height(4.dp))
             Text(
-                "Auto-Login reads a sign-in code from your inbox ON THIS DEVICE, only while a " +
+                "Auto Login reads a sign-in code from your inbox ON THIS DEVICE, only while a " +
                     "login is waiting for one. Use an app-password (not your main password); it " +
                     "stays on this phone and is never sent to our servers.",
                 style = MaterialTheme.typography.bodyMedium,

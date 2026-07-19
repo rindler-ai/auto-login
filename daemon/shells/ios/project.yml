@@ -1,4 +1,4 @@
-# XcodeGen project definition for the Auto-Login iOS + macOS shells.
+# XcodeGen project definition for the Auto Login iOS + macOS shells.
 # Generate with `make ios-app` (runs `xcodegen generate`). The .xcodeproj is
 # gitignored — this file is the committed source of truth.
 name: Custody
@@ -25,7 +25,7 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: ai.rindler.autologin
-        INFOPLIST_KEY_CFBundleDisplayName: "Auto-Login"
+        INFOPLIST_KEY_CFBundleDisplayName: "Auto Login"
         GENERATE_INFOPLIST_FILE: "YES"
   CustodyMac:
     type: application
@@ -40,6 +40,6 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: ai.rindler.autologin.mac
-        INFOPLIST_KEY_CFBundleDisplayName: "Auto-Login"
+        INFOPLIST_KEY_CFBundleDisplayName: "Auto Login"
         INFOPLIST_KEY_LSUIElement: "YES"
         GENERATE_INFOPLIST_FILE: "YES"

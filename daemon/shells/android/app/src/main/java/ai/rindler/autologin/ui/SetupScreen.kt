@@ -175,7 +175,7 @@ private fun ColumnScope.SetupBody(store: KeystoreSecretSource, onAddEmail: () ->
         SettingRow(
             leading = Icons.Rounded.MailOutline,
             title = "Read codes from email",
-            supporting = "Link an inbox and Auto-Login reads emailed sign-in codes on this device, only while a login is waiting",
+            supporting = "Link an inbox and Auto Login reads emailed sign-in codes on this device, only while a login is waiting",
             trailing = RowTrailing.Chevron,
             onClick = onAddEmail,
         )

@@ -1,6 +1,6 @@
 # Privacy
 
-Auto-Login is built around one principle: **your secrets stay on your device.**
+Auto Login is built around one principle: **your secrets stay on your device.**
 
 ## What is stored, and where
 
@@ -30,7 +30,7 @@ Auto-Login is built around one principle: **your secrets stay on your device.**
 
 ## No third-party tracking
 
-Auto-Login contains **no analytics, advertising, or crash-reporting SDKs**. It does
+Auto Login contains **no analytics, advertising, or crash-reporting SDKs**. It does
 not profile you. Besides your configured hub, the only other hosts it contacts are
 the favicon services noted above.
 

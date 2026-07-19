@@ -54,7 +54,7 @@ struct PairingView: View {
     #elseif os(macOS)
     private var deviceName: String { Host.current().localizedName ?? "Mac" }
     #else
-    private var deviceName: String { "Auto-Login" }
+    private var deviceName: String { "Auto Login" }
     #endif
 
     private var trimmedCode: String {

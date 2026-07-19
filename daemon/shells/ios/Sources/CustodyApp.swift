@@ -1,4 +1,4 @@
-// CustodyApp — SwiftUI entry point + navigation shell for Auto-Login credential custody.
+// CustodyApp — SwiftUI entry point + navigation shell for Auto Login credential custody.
 //
 // This is the Dest ROUTER, ported from the Compose `ui/AutoLoginApp.kt`.
 // It drives a five-destination flow
@@ -212,7 +212,7 @@ struct CustodyApp: App {
     var body: some Scene {
         #if os(macOS)
         // macOS runs as a background menu-bar agent (see ../macos/README.md).
-        MenuBarExtra("Auto-Login", systemImage: "lock.shield") {
+        MenuBarExtra("Auto Login", systemImage: "lock.shield") {
             RootView()
         }
         .menuBarExtraStyle(.window)

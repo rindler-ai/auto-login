@@ -1,7 +1,7 @@
 // OnboardingView — the first-run intro shown before Pair, ported from the
 // Compose `ui/OnboardingScreen.kt`.
 // A 3-slide horizontal pager that states the custody promise: credentials are
-// stored on-device, every release is approved, and Auto-Login retains no vault copy.
+// stored on-device, every release is approved, and Auto Login retains no vault copy.
 //
 // Pure UI: the ONLY input is `onDone: () -> Void`, fired by Skip and by the CTA on
 // the last slide. The parent (CustodyApp's nav shell) owns the onboarded flag and
