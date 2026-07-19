@@ -12,7 +12,11 @@ android {
         applicationId = "ai.rindler.autologin"
         minSdk = 26
         targetSdk = 34
-        versionCode = 11
+        // versionName stays 0.1.0 deliberately while the app is pre-release: nobody
+        // is running it, so the number tracks "not shipped yet" rather than counting
+        // up through fixes. versionCode still increments — the release gate requires
+        // it to be strictly monotonic, and 11 is already taken by the merge of #8.
+        versionCode = 12
         versionName = "0.1.0"
 
         // Backend URLs are build params. The DEFAULTS here are PROD (a plain

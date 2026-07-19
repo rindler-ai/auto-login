@@ -18,10 +18,13 @@ data class SupportedSite(val domain: String, val name: String)
  *   { "cards": [ { "domain": "...", "name": "...", "category": "..." }, ... ],
  *     "degraded": bool }
  *
- * Any failure (offline, non-2xx, malformed body) returns an empty list; the caller
- * decides the fallback so a catalog outage never bricks enrollment.
+ * Any failure (offline, non-2xx, malformed body) returns NULL — "could not load" —
+ * which is a different fact from an empty list ("loaded, nothing in it"). Callers
+ * must never treat null as "site not supported": during an outage nothing is known
+ * about any site. The caller decides the fallback so a catalog outage never bricks
+ * enrollment.
  */
-suspend fun fetchSupportedSites(url: String): List<SupportedSite> = withContext(Dispatchers.IO) {
+suspend fun fetchSupportedSites(url: String): List<SupportedSite>? = withContext(Dispatchers.IO) {
     runCatching {
         val conn = (URL(url).openConnection() as HttpURLConnection).apply {
             requestMethod = "GET"
@@ -30,9 +33,9 @@ suspend fun fetchSupportedSites(url: String): List<SupportedSite> = withContext(
             setRequestProperty("Accept", "application/json")
         }
         try {
-            if (conn.responseCode !in 200..299) return@runCatching emptyList()
+            if (conn.responseCode !in 200..299) return@runCatching null
             val body = conn.inputStream.bufferedReader().use { it.readText() }
-            val cards = JSONObject(body).optJSONArray("cards") ?: return@runCatching emptyList()
+            val cards = JSONObject(body).optJSONArray("cards") ?: return@runCatching null
             val out = ArrayList<SupportedSite>(cards.length())
             for (i in 0 until cards.length()) {
                 val card = cards.optJSONObject(i) ?: continue
@@ -45,7 +48,7 @@ suspend fun fetchSupportedSites(url: String): List<SupportedSite> = withContext(
         } finally {
             conn.disconnect()
         }
-    }.getOrDefault(emptyList())
+    }.getOrNull()
 }
 
 /**
