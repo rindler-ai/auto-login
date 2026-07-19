@@ -22,21 +22,69 @@ import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import ai.rindler.mobile.SecretSource
 import org.json.JSONArray
+import java.io.IOException
+import java.security.GeneralSecurityException
+import java.security.KeyStore
 
 class KeystoreSecretSource(context: Context) : SecretSource {
 
     // Master key in the Android Keystore (AES-256-GCM, StrongBox where present).
-    private val prefs: SharedPreferences = run {
+    // Built through a recovery path (§4e): EncryptedSharedPreferences.create THROWS when the
+    // keyset is corrupted or the master key was invalidated (a lock-screen/biometric change
+    // can invalidate it). Because this store is constructed from the Activity, the
+    // RelayService AND the SmsReceiver, an uncaught throw in this initializer fires on every
+    // entry point — an unrecoverable crash LOOP that bricks the app. So on failure we reset
+    // the store and rebuild once; losing saved logins to a reset (the user re-pairs) is
+    // strictly better than a brick.
+    private val prefs: SharedPreferences = openOrResetPrefs(context)
+
+    // Build the encrypted store with the canonical config. AES256_GCM master key +
+    // AES256_SIV keys / AES256_GCM values — kept identical between the create and the
+    // post-reset rebuild so a recovered store is byte-for-byte the same kind of store.
+    private fun createEncryptedPrefs(context: Context): SharedPreferences {
         val masterKey = MasterKey.Builder(context)
             .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
             .build()
-        EncryptedSharedPreferences.create(
+        return EncryptedSharedPreferences.create(
             context,
-            "rindler_custody_secrets",
+            PREFS_FILE,
             masterKey,
             EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
             EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
         )
+    }
+
+    // Open the store, or — if the keyset/master key is unrecoverable — reset it and rebuild
+    // ONCE. AEADBadTagException (a decrypt failure) is a GeneralSecurityException, so those
+    // two catches cover the corrupted-keyset and invalidated-key cases. A recovery drops
+    // every saved login AND this device's pairing identity, so the user must RE-PAIR and
+    // re-add logins after one — the deliberate, documented cost of not bricking.
+    private fun openOrResetPrefs(context: Context): SharedPreferences =
+        try {
+            createEncryptedPrefs(context)
+        } catch (e: GeneralSecurityException) {
+            resetAndRebuild(context, e)
+        } catch (e: IOException) {
+            resetAndRebuild(context, e)
+        }
+
+    // Delete the corrupted prefs file and the master-key alias from the AndroidKeyStore,
+    // then rebuild. If the rebuild ALSO fails, fail loud with a clear cause rather than
+    // looping — a keystore that cannot even be reset is a real device fault, not corruption.
+    private fun resetAndRebuild(context: Context, cause: Exception): SharedPreferences {
+        runCatching { context.deleteSharedPreferences(PREFS_FILE) }
+        runCatching {
+            KeyStore.getInstance(ANDROID_KEYSTORE).apply { load(null) }
+                .deleteEntry(MasterKey.DEFAULT_MASTER_KEY_ALIAS)
+        }
+        return try {
+            createEncryptedPrefs(context)
+        } catch (e: Exception) {
+            throw IllegalStateException(
+                "Auto-Login could not open OR reset its secure store; the device keystore is unusable.",
+                e,
+            )
+        }
     }
 
     init {
@@ -67,6 +115,12 @@ class KeystoreSecretSource(context: Context) : SecretSource {
 
     // Reserved keys for this device's identity (never a real site host).
     private companion object {
+        // The encrypted prefs file — the single source of truth shared by createEncryptedPrefs
+        // and the recovery reset, so the file that is opened is exactly the file that is
+        // deleted (§4e). The master-key alias lives in MasterKey.DEFAULT_MASTER_KEY_ALIAS.
+        const val PREFS_FILE = "rindler_custody_secrets"
+        const val ANDROID_KEYSTORE = "AndroidKeyStore"
+
         const val K_DEVICE_TOKEN = "rindler-meta:device-token"
         const val K_DEVICE_KEY = "rindler-meta:device-key" // base64 Ed25519 private key
 
