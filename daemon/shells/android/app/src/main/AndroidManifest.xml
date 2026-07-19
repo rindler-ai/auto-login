@@ -22,6 +22,17 @@
     <uses-permission android:name="android.permission.RECEIVE_SMS" />
     <uses-feature android:name="android.hardware.telephony" android:required="false" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- REQUEST_IGNORE_BATTERY_OPTIMIZATIONS — Play-review justification. This app is an
+         always-on credential relay: the server pings THIS device whenever the user's agent
+         hits a login wall, and the device must answer within seconds while the app is
+         closed. Doze/App Standby suspend the persistent socket that carries those pings, so
+         a bucketed app simply stops answering and the user's login silently stalls. FCM is
+         not a substitute: high-priority messages are rate-limited and best-effort, and the
+         relay is a bidirectional authenticated socket (sealed credential release, live
+         handshake), not a wake-up notification. The exemption is never requested silently —
+         it is offered behind an explicit user-flipped switch ("Keep running in the
+         background") in Settings and the post-pairing setup checklist, and turning it OFF
+         hands the user to the system revoke screen rather than faking it. -->
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
     <application

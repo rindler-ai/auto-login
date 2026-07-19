@@ -12,8 +12,8 @@ android {
         applicationId = "ai.rindler.autologin"
         minSdk = 26
         targetSdk = 34
-        versionCode = 7
-        versionName = "0.1.6"
+        versionCode = 8
+        versionName = "0.1.7"
 
         // Backend URLs are build params. The DEFAULTS here are PROD (a plain
         // release APK ships against prod); the `debug` build type below points at

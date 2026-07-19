@@ -2,16 +2,10 @@ package ai.rindler.autologin.ui
 
 import ai.rindler.autologin.KeystoreSecretSource
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.ErrorOutline
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -20,7 +14,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
@@ -42,40 +35,42 @@ fun AdvancedScreen(
     val scope = rememberCoroutineScope()
     val cs = MaterialTheme.colorScheme
 
-    Column(Modifier.fillMaxSize().padding(horizontal = 20.dp)) {
-        TopBar(title = "Advanced", onBack = onBack)
-        Spacer(Modifier.height(16.dp))
-        Text(
-            "SELF-HOSTED SERVER",
-            style = MaterialTheme.typography.labelSmall,
-            color = cs.onSurfaceVariant,
-            modifier = Modifier.padding(start = 4.dp, bottom = 8.dp),
-        )
+    AppScreen(title = "Advanced", onBack = onBack, footer = true) {
+        SectionHeader("SELF-HOSTED SERVER")
         Text(
             "Most people don't need this. Point Auto-Login at your own server instead of the default.",
             style = MaterialTheme.typography.bodyMedium,
             color = cs.onSurfaceVariant,
-            modifier = Modifier.padding(start = 4.dp, bottom = 18.dp),
+            modifier = Modifier.padding(horizontal = 16.dp),
         )
+        Spacer(Modifier.height(16.dp))
         AppTextField(
             value = hub,
             onValueChange = { hub = it.trim(); error = null },
             label = "Server address (wss://…)",
             isError = error != null,
+            modifier = Modifier.padding(horizontal = 16.dp),
         )
-        Spacer(Modifier.height(14.dp))
+        Spacer(Modifier.height(16.dp))
         AppTextField(
             value = code,
             onValueChange = { code = it.trim(); error = null },
             label = "Pairing code",
+            mono = true,
             isError = error != null,
+            modifier = Modifier.padding(horizontal = 16.dp),
         )
-        AnimatedVisibility(error != null) { ErrorRow(error ?: "") }
-        Spacer(Modifier.height(16.dp))
+        AnimatedVisibility(error != null) {
+            Column(Modifier.padding(horizontal = 16.dp)) {
+                StatusLine(StatusKind.Error, error ?: "")
+            }
+        }
+        Spacer(Modifier.height(24.dp))
         PrimaryButton(
             text = "Connect",
             enabled = code.isNotBlank() && hub.isNotBlank(),
             loading = busy,
+            modifier = Modifier.padding(horizontal = 16.dp),
             onClick = {
                 val h = hub.trim()
                 if (!h.startsWith("ws://") && !h.startsWith("wss://")) {
@@ -95,18 +90,5 @@ fun AdvancedScreen(
                 }
             },
         )
-    }
-}
-
-@Composable
-private fun ErrorRow(msg: String) {
-    val cs = MaterialTheme.colorScheme
-    androidx.compose.foundation.layout.Row(
-        Modifier.padding(top = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        Icon(Icons.Rounded.ErrorOutline, null, tint = cs.error, modifier = Modifier.size(16.dp))
-        Text(msg, style = MaterialTheme.typography.bodyMedium, color = cs.error)
     }
 }

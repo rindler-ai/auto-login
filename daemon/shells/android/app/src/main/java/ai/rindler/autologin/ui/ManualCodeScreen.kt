@@ -17,22 +17,12 @@ import ai.rindler.autologin.CodeSubmitResult
 import ai.rindler.autologin.KeystoreSecretSource
 import ai.rindler.autologin.submitOtpCode
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Dialpad
-import androidx.compose.material.icons.rounded.ErrorOutline
-import androidx.compose.material.icons.rounded.Info
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -42,10 +32,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
@@ -103,14 +90,10 @@ fun ManualCodeScreen(
         }
     }
 
-    // Fixed header, a weighted scrollable body, and the trust line pinned to the
-    // bottom — the same vertical rhythm as Home/Settings so the screen never looks
-    // top-crammed with a floating footer.
-    Column(Modifier.fillMaxSize().padding(horizontal = 20.dp)) {
-        TopBar(title = "Enter code", onBack = onDone)
-        Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
-            Spacer(Modifier.height(8.dp))
-            IconChip(Icons.Rounded.Dialpad, size = 52)
+    AppScreen(title = "Enter code", onBack = onDone, footer = true) {
+        Column(Modifier.padding(horizontal = 16.dp)) {
+            Spacer(Modifier.height(24.dp))
+            IconBadge(Icons.Rounded.Dialpad, 56.dp)
             Spacer(Modifier.height(16.dp))
             Text(
                 "Type the code your login is waiting for and Auto-Login will submit it.",
@@ -130,11 +113,12 @@ fun ManualCodeScreen(
                     if (state != SubmitState.Idle && state != SubmitState.Submitting) state = SubmitState.Idle
                 },
                 label = "2FA code",
+                mono = true,
                 enabled = !submitting, // lock the field while the POST is in flight
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
             )
 
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(4.dp))
             StatusRow(state)
 
             Spacer(Modifier.height(24.dp))
@@ -145,30 +129,18 @@ fun ManualCodeScreen(
                 loading = submitting,
             )
         }
-        TrustFooter()
     }
 }
 
 @Composable
 private fun StatusRow(state: SubmitState) {
-    val cs = MaterialTheme.colorScheme
-    val (icon, text, tint) = when (state) {
+    when (state) {
         is SubmitState.Success ->
-            Triple(Icons.Rounded.CheckCircle, "Sent — your login is continuing.", cs.primary)
+            StatusLine(StatusKind.Success, "Sent — your login is continuing.")
         is SubmitState.NoPendingLogin ->
-            Triple(Icons.Rounded.Info, "No login is waiting for a code right now.", cs.onSurfaceVariant)
+            StatusLine(StatusKind.Info, "No login is waiting for a code right now.")
         is SubmitState.Failed ->
-            Triple(Icons.Rounded.ErrorOutline, state.message, cs.error)
-        else -> return
-    }
-    InlineStatus(icon, text, tint)
-}
-
-@Composable
-private fun InlineStatus(icon: ImageVector, text: String, tint: Color) {
-    Row(verticalAlignment = Alignment.Top) {
-        Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(18.dp))
-        Spacer(Modifier.size(10.dp))
-        Text(text, style = MaterialTheme.typography.bodyMedium, color = tint)
+            StatusLine(StatusKind.Error, state.message)
+        else -> Unit
     }
 }
