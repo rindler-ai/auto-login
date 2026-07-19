@@ -82,6 +82,13 @@ fun HomeScreen(
     }
     var stepsLeft by remember { mutableStateOf(setupStepsLeft()) }
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { stepsLeft = setupStepsLeft() }
+    // SMS auto-read counts as ACTIVE only when opted in AND still granted. Re-derived on
+    // resume, never remembered: Android can auto-revoke the grant from an idle app and the
+    // user can revoke it in system Settings, and either must bring the manual-code row back
+    // rather than leave them with no way to finish a sign-in.
+    fun smsAutoReadActive(): Boolean = store.isSmsAutoReadEnabled() && SmsAutoRead.hasPermission(ctx)
+    var smsActive by remember { mutableStateOf(smsAutoReadActive()) }
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { smsActive = smsAutoReadActive() }
     // Shown only after the checklist has been seen (before that it is an interstitial, not
     // a nudge), never after "Don't remind me", and never once both steps are done.
     val showSetupNudge = store.isSetupSeen() && !store.isSetupNudgeDismissed() && stepsLeft > 0
@@ -123,15 +130,18 @@ fun HomeScreen(
             )
         }
 
-        // Type a 2FA code by hand — the reliability floor when a login is waiting and
-        // auto-read is off or missed the text.
-        SettingRow(
-            leading = Icons.Rounded.Dialpad,
-            title = "Enter a login code",
+        // Type a code by hand — the reliability floor. Hidden while SMS auto-read is
+        // active, since codes fill themselves then and the row is just clutter; it
+        // reappears the moment auto-read is switched off or the permission goes away.
+        if (!smsActive) {
+            SettingRow(
+                leading = Icons.Rounded.Dialpad,
+                title = "Enter a login code",
                 supporting = "Type a code from a text or email if it wasn't filled in automatically",
-            trailing = RowTrailing.Chevron,
-            onClick = onEnterCode,
-        )
+                trailing = RowTrailing.Chevron,
+                onClick = onEnterCode,
+            )
+        }
 
         SectionHeader("SAVED LOGINS", trailing = if (sites.isNotEmpty()) sites.size.toString() else null)
 
