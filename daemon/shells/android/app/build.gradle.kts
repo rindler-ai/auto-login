@@ -16,7 +16,7 @@ android {
         // is running it, so the number tracks "not shipped yet" rather than counting
         // up through fixes. versionCode still increments — the release gate requires
         // it to be strictly monotonic, and 11 is already taken by the merge of #8.
-        versionCode = 15
+        versionCode = 16
         versionName = "0.1.0"
 
         // Backend URLs are build params. The DEFAULTS here are PROD (a plain
