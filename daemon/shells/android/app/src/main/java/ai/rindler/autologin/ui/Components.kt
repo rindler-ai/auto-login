@@ -158,8 +158,10 @@ fun TopBar(
         Modifier
             .fillMaxWidth()
             .background(bg)
-            .height(64.dp)
-            .padding(horizontal = 4.dp),
+            // heightIn, not a fixed height: at a large font scale a title like "Finish
+            // setting up" needs two lines, and a fixed 64dp box cramps and clips it.
+            .heightIn(min = 64.dp)
+            .padding(horizontal = 4.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (onBack != null) {
@@ -177,6 +179,10 @@ fun TopBar(
             title,
             style = MaterialTheme.typography.titleLarge,
             color = cs.onSurface,
+            // Cap at two lines so a long title at a large font scale cannot push the
+            // trailing action off screen or grow the bar without bound.
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
             modifier = Modifier
                 .weight(1f)
                 .padding(start = if (onBack != null) 2.dp else 8.dp),
@@ -284,7 +290,18 @@ fun AccountHeader(
         // RIGHT — 40dp avatar in a 48dp tap target → Settings.
         val avatarBox = Modifier
             .size(48.dp)
-            .then(if (onOpenSettings != null) Modifier.clickable(onClick = onOpenSettings) else Modifier)
+            .then(
+                // A screen reader had NOTHING to announce here: the avatar is the only route
+                // to Settings, and Settings is the only place Sign out lives, so an
+                // unlabelled target meant a blind user could not sign out at all.
+                if (onOpenSettings != null) {
+                    Modifier
+                        .clickable(onClickLabel = "Open settings", onClick = onOpenSettings)
+                        .semantics { contentDescription = "Account and settings" }
+                } else {
+                    Modifier
+                },
+            )
         Box(avatarBox, contentAlignment = Alignment.Center) {
             if (email == null) {
                 IconBadge(Icons.Rounded.Shield, 40.dp)
@@ -422,7 +439,13 @@ fun SettingRow(
             },
         )
         .heightIn(min = minH)
-        .padding(horizontal = 16.dp)
+        // Vertical padding is NOT optional: `minH` only sets a floor, so on a narrow screen
+        // or at a large font scale a supporting line wraps past it and the text then fills
+        // the row edge to edge — one row's last line ends up touching the next row's title,
+        // which reads as overlapping text. The 12dp guarantees separation no matter how far
+        // the text grows. Applied INSIDE heightIn, so short rows keep their 72/56dp target
+        // and only wrapped rows actually get taller.
+        .padding(horizontal = 16.dp, vertical = 12.dp)
 
     Row(base, verticalAlignment = Alignment.CenterVertically) {
         if (leading != null) {
@@ -695,22 +718,30 @@ fun AppTextField(
 @Composable
 fun TrustFooter(modifier: Modifier = Modifier) {
     Row(
-        modifier.fillMaxWidth().padding(vertical = 18.dp),
+        // Horizontal padding is load-bearing: without it the line runs to the screen edges
+        // and the last character clips on a narrow device. `Top` alignment (not Center)
+        // keeps the lock beside the FIRST line when the text wraps, instead of floating
+        // against the middle of a two-line block.
+        modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 18.dp),
         horizontalArrangement = Arrangement.Center,
-        verticalAlignment = Alignment.CenterVertically,
+        verticalAlignment = Alignment.Top,
     ) {
         Icon(
             Icons.Rounded.Lock,
             contentDescription = null,
             tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.size(14.dp),
+            modifier = Modifier.size(14.dp).padding(top = 2.dp),
         )
         Spacer(Modifier.width(7.dp))
         Text(
-            "Encrypted at rest · releases are end-to-end encrypted",
+            "Encrypted on this phone · sent only end-to-end encrypted",
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,
+            // `fill = false` so the text takes only the width it needs (staying centred
+            // next to the lock when it fits) but is still CAPPED at the available width,
+            // so it wraps instead of overflowing the row.
+            modifier = Modifier.weight(1f, fill = false),
         )
     }
 }

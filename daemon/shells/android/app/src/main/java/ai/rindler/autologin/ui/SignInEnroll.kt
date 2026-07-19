@@ -107,14 +107,14 @@ internal fun deviceName(): String = "${Build.MANUFACTURER} ${Build.MODEL}".trim(
 
 /** Map a raw pairing error to friendly copy (shared by sign-in + manual entry). */
 fun friendlyPairError(raw: String?): String = when {
-    raw == null -> "Something went wrong. Try again."
+    raw == null -> "Couldn't finish linking this phone. Try again."
     // Pairing-channel TOFU: the server key at pair/complete did not match the
     // fingerprint in the code — a possible on-path MITM.
     raw.contains("could not verify the hub's identity") ->
         "This device couldn't verify the server's identity. You may be on an untrusted network. Try again from a trusted connection."
     raw.contains("401") || raw.contains("invalid") ->
-        "That code didn't work. It may have expired, so generate a new one."
+        "That sign-in link didn't work — it may have expired. Sign in again, or generate a fresh code if you're using one."
     raw.contains("timeout") || raw.contains("connect") ->
         "Couldn't reach the server. Check your connection and retry."
-    else -> "Couldn't pair. Generate a fresh code and try again."
+    else -> "Couldn't finish linking this phone. Sign in again, or generate a fresh code and retry."
 }

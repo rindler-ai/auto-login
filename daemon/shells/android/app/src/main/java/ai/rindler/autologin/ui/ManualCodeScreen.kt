@@ -71,7 +71,7 @@ fun ManualCodeScreen(
         if (trimmed.isEmpty() || submitting) return
         val token = store.deviceToken()
         if (token == null) {
-            state = SubmitState.Failed("This device isn't paired anymore. Re-pair in Settings, then retry.")
+            state = SubmitState.Failed("This phone is no longer linked to your account. Sign in again from Settings, then retry.")
             return
         }
         state = SubmitState.Submitting
@@ -83,7 +83,7 @@ fun ManualCodeScreen(
                 CodeSubmitResult.DELIVERED -> SubmitState.Success
                 CodeSubmitResult.NO_PENDING_LOGIN -> SubmitState.NoPendingLogin
                 CodeSubmitResult.UNAUTHORIZED ->
-                    SubmitState.Failed("This device's pairing looks invalid. Re-pair in Settings, then try again.")
+                    SubmitState.Failed("This phone's link to your account is no longer valid. Sign in again from Settings, then retry.")
                 CodeSubmitResult.FAILED ->
                     SubmitState.Failed("Couldn't reach the server. Check your connection and try again.")
             }
@@ -112,7 +112,7 @@ fun ManualCodeScreen(
                     // tap fire a concurrent POST.
                     if (state != SubmitState.Idle && state != SubmitState.Submitting) state = SubmitState.Idle
                 },
-                label = "2FA code",
+                label = "Verification code",
                 mono = true,
                 enabled = !submitting, // lock the field while the POST is in flight
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),

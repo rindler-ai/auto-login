@@ -32,7 +32,22 @@ data class EgressMint(val token: String, val gateway: String)
  * the lane has no gateway, anything else) or transport/parse error returns null.
  * Best-effort: never throws. NEVER logs the token or gateway.
  */
-suspend fun mintEgress(hubUrl: String, deviceToken: String, name: String): EgressMint? =
+/**
+ * Why a mint attempt ended the way it did.
+ *
+ * [Unavailable] is kept separate from [Failed] on purpose: a 503 means this server offers
+ * no egress gateway at all, so the attempt can NEVER succeed here and telling the user to
+ * "try again" sends them into a loop. [Failed] is the genuinely retryable case.
+ */
+sealed interface EgressMintResult {
+    data class Ok(val mint: EgressMint) : EgressMintResult
+
+    data object Unavailable : EgressMintResult
+
+    data object Failed : EgressMintResult
+}
+
+suspend fun mintEgress(hubUrl: String, deviceToken: String, name: String): EgressMintResult =
     withContext(Dispatchers.IO) {
         runCatching {
             val endpoint = URL("${smsRelayOrigin(hubUrl)}/devices/egress/token")
@@ -53,17 +68,27 @@ suspend fun mintEgress(hubUrl: String, deviceToken: String, name: String): Egres
                         val json = JSONObject(body)
                         val token = json.optString("token").takeIf { it.isNotBlank() }
                         val gateway = json.optString("gateway").takeIf { it.isNotBlank() }
-                        if (token != null && gateway != null) EgressMint(token, gateway) else null
+                        if (token != null && gateway != null) {
+                            EgressMintResult.Ok(EgressMint(token, gateway))
+                        } else {
+                            EgressMintResult.Failed
+                        }
+                    }
+                    // 503 = this server has no egress gateway configured. Permanent here,
+                    // so the UI must not offer a pointless retry.
+                    HttpURLConnection.HTTP_UNAVAILABLE -> {
+                        conn.errorStream?.close()
+                        EgressMintResult.Unavailable
                     }
                     else -> {
                         conn.errorStream?.close() // drain so the socket closes cleanly
-                        null
+                        EgressMintResult.Failed
                     }
                 }
             } finally {
                 conn.disconnect()
             }
-        }.getOrNull()
+        }.getOrElse { EgressMintResult.Failed }
     }
 
 /**
