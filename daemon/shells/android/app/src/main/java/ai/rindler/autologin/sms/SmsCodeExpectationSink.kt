@@ -8,7 +8,10 @@
 
 package ai.rindler.autologin.sms
 
+import ai.rindler.autologin.CodeNeededNotifier
+import ai.rindler.autologin.KeystoreSecretSource
 import ai.rindler.autologin.email.EmailCodeExpectationSink
+import ai.rindler.autologin.shouldPromptForSms
 import ai.rindler.mobile.CodeExpectationSink
 import android.content.Context
 
@@ -17,7 +20,17 @@ class SmsCodeExpectationSink(appContext: Context) : CodeExpectationSink {
 
     // gomobile binds the Go `int` ttlSeconds to a Java long.
     override fun onExpectingSMSCode(site: String, ttlSeconds: Long) {
+        // Always arm — the window is harmless when nothing reads it, and a live login
+        // asked for it. But if SMS auto-read CAN'T serve (opt-in off OR RECEIVE_SMS
+        // denied), the arm reads nothing and the login stalls silently: nudge the user to
+        // enter the code by hand. Both conditions are read HERE (Android) and reduced to
+        // the pure shouldPromptForSms decision so the prompt-or-not is unit-tested.
         SmsExpectation.arm(app, ttlSeconds)
+        val enabled = KeystoreSecretSource(app).isSmsAutoReadEnabled()
+        val hasPermission = SmsAutoRead.hasPermission(app)
+        if (shouldPromptForSms(enabled, hasPermission)) {
+            CodeNeededNotifier.notifySmsCodeNeeded(app)
+        }
     }
 
     // The regenerated CodeExpectationSink also requires this method (the Go core added

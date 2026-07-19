@@ -67,11 +67,21 @@ private val DestSaver: Saver<Dest, String> = Saver(
     restore = { name -> restoredDest(runCatching { Dest.valueOf(name) }.getOrDefault(Dest.Home)) },
 )
 
+// internal (not public): the nav vocabulary it speaks — Dest, restoredDest, DestSaver — is
+// all internal, and its only caller is MainActivity in this module. Being internal lets it
+// take a Dest? initial destination without a public symbol exposing the internal Dest type.
 @Composable
-fun AutoLoginApp(
+internal fun AutoLoginApp(
     store: KeystoreSecretSource,
     pendingEnroll: EnrollRequest? = null,
     onEnrollConsumed: () -> Unit = {},
+    // The screen to land on for THIS fresh launch, when set by MainActivity from a "code
+    // needed" notification tap (Dest.ManualCode). Null = use the normal start resolution.
+    // Only ever the INITIAL destination: because it is read inside the rememberSaveable
+    // initial lambda (which runs solely on a first composition, no saved value), a
+    // recreate restores the saved Dest and ignores this — so it can never fight the §4d
+    // restored instance state.
+    initialDest: Dest? = null,
 ) {
     val ctx = LocalContext.current
     // Reduced-motion (OS animator scale 0): the nav slide becomes a plain cross-fade.
@@ -81,7 +91,7 @@ fun AutoLoginApp(
     // on a recreate the saved Dest is restored via DestSaver.
     var dest by rememberSaveable(stateSaver = DestSaver) {
         mutableStateOf(
-            when {
+            initialDest ?: when {
                 !store.isOnboarded() -> Dest.Onboarding
                 store.deviceToken() == null -> Dest.Pair
                 // Paired but never primed — the checklist survives process death mid-flow
