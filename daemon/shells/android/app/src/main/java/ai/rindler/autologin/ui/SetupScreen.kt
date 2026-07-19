@@ -31,6 +31,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Checklist
+import androidx.compose.material.icons.rounded.MailOutline
+import androidx.compose.material.icons.rounded.MarkEmailRead
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -53,6 +55,7 @@ fun SetupScreen(
     store: KeystoreSecretSource,
     fromHome: Boolean = false,
     onDone: () -> Unit,
+    onAddEmail: () -> Unit = {},
 ) {
     // One exit funnel: whichever affordance the user takes, the flag is written before we
     // navigate, so a process death right after cannot resurrect the interstitial.
@@ -86,7 +89,7 @@ fun SetupScreen(
             },
             footer = true,
         ) {
-            SetupBody(store)
+            SetupBody(store, onAddEmail)
         }
         return
     }
@@ -118,7 +121,7 @@ fun SetupScreen(
                 .fillMaxWidth()
                 .verticalScroll(scroll),
         ) {
-            SetupBody(store)
+            SetupBody(store, onAddEmail)
         }
 
         // Pinned CTA + trust line — never scroll away from the way out.
@@ -137,7 +140,7 @@ fun SetupScreen(
  * no SectionHeader — the checklist reads as one list, not four sections.
  */
 @Composable
-private fun ColumnScope.SetupBody(store: KeystoreSecretSource) {
+private fun ColumnScope.SetupBody(store: KeystoreSecretSource, onAddEmail: () -> Unit) {
     val cs = MaterialTheme.colorScheme
     Spacer(Modifier.height(8.dp))
     Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -164,6 +167,26 @@ private fun ColumnScope.SetupBody(store: KeystoreSecretSource) {
     // Ordered by what a stalled login needs first: read the code, stay alive to receive
     // it, then the optional network + visibility opt-ins.
     SmsAutoReadToggle(store)
+    // Email codes: offer EXACTLY ONE address here (plurality lives on the manage page). It is
+    // deliberately NOT part of the Home "steps left" count — many users' sites never email a
+    // code, so declining is a legitimate final answer, exactly like egress.
+    val linkedEmails = store.linkedEmails()
+    if (linkedEmails.isEmpty()) {
+        SettingRow(
+            leading = Icons.Rounded.MailOutline,
+            title = "Read codes from email",
+            supporting = "Link an inbox and Auto-Login reads emailed sign-in codes on this device, only while a login is waiting",
+            trailing = RowTrailing.Chevron,
+            onClick = onAddEmail,
+        )
+    } else {
+        // Already linked during onboarding: confirm it, and offer no "add another" here.
+        SettingRow(
+            leading = Icons.Rounded.MarkEmailRead,
+            title = "Email codes are on",
+            supporting = "Reading emailed sign-in codes from ${linkedEmails.first().address}",
+        )
+    }
     BatteryToggle()
     EgressToggle(store)
     NotificationToggle() // hidden only below SDK 33, where the permission does not exist

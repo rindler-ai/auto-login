@@ -2,6 +2,7 @@ package mobile
 
 import (
 	"bytes"
+	"context"
 	"crypto/ed25519"
 	"encoding/base64"
 	"encoding/hex"
@@ -11,8 +12,11 @@ import (
 	"net/http/httptest"
 	"reflect"
 	"sort"
+	"strings"
 	"testing"
+	"time"
 
+	"github.com/rindler-ai/auto-login/core/otp"
 	"github.com/rindler-ai/auto-login/core/protocol"
 	"github.com/rindler-ai/auto-login/core/relay"
 	"github.com/rindler-ai/auto-login/core/store"
@@ -216,6 +220,33 @@ func TestApproveAdapterArmsSmsSink(t *testing.T) {
 	}
 }
 
+// An email_otp_code ping, exactly like sms_otp_code, must fire the code-expectation
+// sink (with the ping's site + TTL) so the native mailbox reader arms — but must NOT
+// touch the SMS sink, and still declines the release ("", false): the code is read
+// on-device and handed back out-of-band, NEVER sealed over this HPKE ping. The sink
+// fires with a nil Approver (email reading needs no approval). Mirrors
+// TestApproveAdapterArmsSmsSink for the email kind (arm-and-decline).
+func TestApproveAdapterArmsEmailSink(t *testing.T) {
+	sink := &recordingSink{}
+	adapter := approveAdapter(nil, sink)
+
+	if code, ok := adapter(nil, protocol.SecretPing{Site: "airbnb.example", SecretKind: protocol.SecretEmailOTPCode, TTLSeconds: 90}); ok || code != "" {
+		t.Fatalf("email ping returned code=%q ok=%v, want empty/false (arm-and-decline; NOTHING sealed)", code, ok)
+	}
+	if sink.emailCalls != 1 || sink.emailSite != "airbnb.example" || sink.emailTTL != 90 {
+		t.Fatalf("email sink calls=%d site=%q ttl=%d, want 1/airbnb.example/90", sink.emailCalls, sink.emailSite, sink.emailTTL)
+	}
+	if sink.smsCalls != 0 {
+		t.Fatalf("email ping fired the SMS sink %d times, want 0", sink.smsCalls)
+	}
+	// A non-email kind must not arm the email reader.
+	adapter(nil, protocol.SecretPing{Site: "s", SecretKind: protocol.SecretPassword, TTLSeconds: 99})
+	adapter(nil, protocol.SecretPing{Site: "s", SecretKind: protocol.SecretSMSOTPCode, TTLSeconds: 99})
+	if sink.emailCalls != 1 {
+		t.Fatalf("email sink fired %d times, want only the one email_otp_code ping", sink.emailCalls)
+	}
+}
+
 type approverFunc func(site, kind string) bool
 
 func (f approverFunc) Approve(site, kind string) bool { return f(site, kind) }
@@ -223,6 +254,31 @@ func (f approverFunc) Approve(site, kind string) bool { return f(site, kind) }
 type codeSinkFunc func(site string, ttlSeconds int)
 
 func (f codeSinkFunc) OnExpectingSMSCode(site string, ttlSeconds int) { f(site, ttlSeconds) }
+
+// OnExpectingEmailCode is a no-op for this SMS-only fake so codeSinkFunc still
+// satisfies the two-method CodeExpectationSink; the email arm is covered by
+// recordingSink in TestApproveAdapterArmsEmailSink.
+func (f codeSinkFunc) OnExpectingEmailCode(string, int) {}
+
+// recordingSink implements the FULL CodeExpectationSink (both methods) so the email
+// test can assert the email arm fired without disturbing the SMS counter.
+type recordingSink struct {
+	smsSite, emailSite   string
+	smsTTL, emailTTL     int
+	smsCalls, emailCalls int
+}
+
+func (r *recordingSink) OnExpectingSMSCode(site string, ttlSeconds int) {
+	r.smsSite = site
+	r.smsTTL = ttlSeconds
+	r.smsCalls++
+}
+
+func (r *recordingSink) OnExpectingEmailCode(site string, ttlSeconds int) {
+	r.emailSite = site
+	r.emailTTL = ttlSeconds
+	r.emailCalls++
+}
 
 // Pair hands the native shell BOTH halves of the enrollment: the device token and
 // the server's ping-signing pubkey. A shell that persisted only the token would
@@ -260,4 +316,94 @@ func TestPair_ReturnsTokenAndServerPubkey(t *testing.T) {
 		t.Fatalf("Start rejected the pubkey Pair returned: %v", err)
 	}
 	session.Stop() // it is already dialing an unreachable hub in the background
+}
+
+// fetchEmailOTP must honour BOTH bounds a windowed on-device read depends on:
+//   - freshness (sinceEpochSec): a code from BEFORE the arm time is never returned, so a
+//     stale code from an earlier attempt can't be replayed into this login.
+//   - sender (fromContains): only mail from the expected OTP sender is a candidate, so an
+//     unrelated cued number from a different sender is never forwarded.
+//
+// Driven through otp.FakeMailbox (same From/Since filtering + ExtractCode path as the real
+// IMAP reader) so ONLY the extracted code — never a message body — can come back.
+func TestFetchEmailOTP_FreshnessAndSenderBounds(t *testing.T) {
+	arm := time.Now()
+	sender := "no-reply@bank.example"
+	fresh := otp.FakeMessage{From: "Bank <" + sender + ">", Subject: "Your code", Body: "Your verification code is 314159", Date: arm.Add(30 * time.Second)}
+	stale := otp.FakeMessage{From: "Bank <" + sender + ">", Subject: "Your code", Body: "Your verification code is 271828", Date: arm.Add(-10 * time.Minute)}
+	wrongSender := otp.FakeMessage{From: "Promo <deals@spam.example>", Subject: "Your code", Body: "Your verification code is 999999", Date: arm.Add(30 * time.Second)}
+
+	sinceArm := arm.Unix()
+
+	// A fresh message from the expected sender yields its code.
+	code, err := fetchEmailOTP(&otp.FakeMailbox{Messages: []otp.FakeMessage{fresh}}, sender, sinceArm, 0)
+	if err != nil || code != "314159" {
+		t.Fatalf("fresh matching mail: code=%q err=%v, want 314159/nil", code, err)
+	}
+
+	// A stale code (before the arm time) is out of the freshness window — no code, and it
+	// must NOT be misread as a broken mailbox (auth failure).
+	code, err = fetchEmailOTP(&otp.FakeMailbox{Messages: []otp.FakeMessage{stale}}, sender, sinceArm, 0)
+	if code != "" {
+		t.Fatalf("stale mail returned code=%q, want \"\" (freshness bound)", code)
+	}
+	if errors.Is(err, ErrMailboxAuth) {
+		t.Fatalf("stale-mail miss classified as auth failure: %v", err)
+	}
+
+	// A cued code from the WRONG sender is not a candidate — no code returned.
+	code, _ = fetchEmailOTP(&otp.FakeMailbox{Messages: []otp.FakeMessage{wrongSender}}, sender, sinceArm, 0)
+	if code != "" {
+		t.Fatalf("wrong-sender mail returned code=%q, want \"\" (sender bound)", code)
+	}
+
+	// Sender + freshness together: given the fresh right-sender code AND a wrong-sender
+	// decoy, only the right one comes back.
+	code, err = fetchEmailOTP(&otp.FakeMailbox{Messages: []otp.FakeMessage{fresh, wrongSender}}, sender, sinceArm, 0)
+	if err != nil || code != "314159" {
+		t.Fatalf("fresh+decoy: code=%q err=%v, want 314159/nil", code, err)
+	}
+}
+
+// The three outcomes the native reader acts on differently must map to distinct TYPED
+// results — the whole point of NOT collapsing everything to "". A revoked app-password
+// (ErrIMAPAuth) becomes ErrMailboxAuth (broken → badge + stop); a "no code yet"
+// (ErrNoCode) becomes ("", nil) (keep polling); anything else becomes ErrMailboxUnavailable
+// (transient → keep polling). Driven through a reader double returning each error.
+func TestFetchEmailOTP_ClassifiesErrors(t *testing.T) {
+	authFailed := readerFunc(func(otp.FetchOptions) (string, error) { return "", otp.ErrIMAPAuth })
+	if _, err := fetchEmailOTP(authFailed, "s", 0, 0); !errors.Is(err, ErrMailboxAuth) {
+		t.Fatalf("IMAP auth failure -> %v, want ErrMailboxAuth (revoked app-password must surface as broken)", err)
+	}
+	// Cross-language contract: the native reader (MailboxReader.kt) classifies a broken
+	// mailbox by matching this substring on the gomobile Exception message, so a rename
+	// here without updating isMailboxAuthError() would silently break the warning badge.
+	if !strings.Contains(ErrMailboxAuth.Error(), "rejected the app password") {
+		t.Fatalf("ErrMailboxAuth message = %q; the Kotlin isMailboxAuthError() matches on \"rejected the app password\"", ErrMailboxAuth.Error())
+	}
+
+	noCode := readerFunc(func(otp.FetchOptions) (string, error) { return "", otp.ErrNoCode })
+	if code, err := fetchEmailOTP(noCode, "s", 0, 0); code != "" || err != nil {
+		t.Fatalf("no-code-yet -> code=%q err=%v, want \"\"/nil (steady polling state, not a failure)", code, err)
+	}
+
+	networkBlip := readerFunc(func(otp.FetchOptions) (string, error) {
+		return "", errors.New("otp: dial imap.example: connection refused")
+	})
+	if err := func() error { _, e := fetchEmailOTP(networkBlip, "s", 0, 0); return e }(); !errors.Is(err, ErrMailboxUnavailable) {
+		t.Fatalf("transient failure -> %v, want ErrMailboxUnavailable", err)
+	}
+	// A transient blip must NEVER be misclassified as auth (which would wrongly brand a
+	// healthy mailbox broken on a momentary outage).
+	if _, err := fetchEmailOTP(networkBlip, "s", 0, 0); errors.Is(err, ErrMailboxAuth) {
+		t.Fatal("transient failure misclassified as auth failure")
+	}
+}
+
+// readerFunc is an otp.MailboxReader test double: it returns a canned (code, error) so
+// the classification can be exercised without a real inbox.
+type readerFunc func(otp.FetchOptions) (string, error)
+
+func (f readerFunc) FetchLatestOTP(_ context.Context, opts otp.FetchOptions) (string, error) {
+	return f(opts)
 }

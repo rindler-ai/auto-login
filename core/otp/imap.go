@@ -26,6 +26,12 @@ import (
 // exercises the same MailboxReader contract in tests (mirroring how
 // the server is tested with a fake inbox reader,
 // whose live IMAP fetch this deliberately parallels).
+// freshnessSkew is how far before the login's arm time a code may have arrived
+// and still count as fresh — a clock-skew grace between the server's InternalDate
+// and the device's arm time. Kept small so it does not widen the window an
+// attacker or a prior login could exploit.
+const freshnessSkew = 90 * time.Second
+
 type IMAPMailbox struct {
 	Host     string // e.g. imap.gmail.com (TLS :993 is assumed)
 	User     string
@@ -79,6 +85,25 @@ func (m IMAPMailbox) FetchLatestOTP(ctx context.Context, opts FetchOptions) (str
 }
 
 // fetchOnce performs a single connect / search / scan pass over the inbox and
+// VerifyLogin checks the mailbox credential by connecting and authenticating ONLY
+// — it performs NO SEARCH, FETCH, or body read, so it never touches the user's
+// mail. It exists so the Link screen can confirm an app-password works WITHOUT the
+// "read up to 20 message bodies outside a login window" side effect a full fetch
+// would have (the reader's whole promise is that it reads mail only while a login
+// is armed). Returns nil on success, ErrIMAPAuth on a rejected credential (never
+// echoing it), or a wrapped transient error.
+func (m IMAPMailbox) VerifyLogin() error {
+	c, err := client.DialTLS(m.Host+":993", nil)
+	if err != nil {
+		return fmt.Errorf("otp: dial %s: %w", m.Host, err)
+	}
+	defer func() { _ = c.Logout() }()
+	if err := c.Login(m.User, m.Password); err != nil {
+		return ErrIMAPAuth
+	}
+	return nil
+}
+
 // returns the newest matching message's extracted code (or "" if none yet).
 func (m IMAPMailbox) fetchOnce(opts FetchOptions) (string, error) {
 	c, err := client.DialTLS(m.Host+":993", nil)
@@ -88,9 +113,11 @@ func (m IMAPMailbox) fetchOnce(opts FetchOptions) (string, error) {
 	defer func() { _ = c.Logout() }()
 
 	if err := c.Login(m.User, m.Password); err != nil {
-		// Never wrap: an IMAP LOGIN error can echo the credential. Surface a
-		// static message only.
-		return "", errors.New("otp: IMAP login failed")
+		// Never wrap: an IMAP LOGIN error can echo the credential. Surface the
+		// static, TYPED sentinel only (ErrIMAPAuth), so a caller can distinguish a
+		// revoked/wrong app-password from a transient failure without ever seeing
+		// the credential.
+		return "", ErrIMAPAuth
 	}
 
 	// Prefer Gmail's All Mail (label-agnostic); fall back to INBOX elsewhere.
@@ -140,11 +167,14 @@ func (m IMAPMailbox) fetchOnce(opts FetchOptions) (string, error) {
 		if msg == nil {
 			continue
 		}
+		// Freshness + newest-wins are keyed on the server's InternalDate, NEVER the
+		// message's own Date: header (Envelope.Date). Date: is set by the sender, so
+		// preferring it let an attacker pre-plant a code with a far-future Date: that
+		// both passed the freshness lower bound AND out-ranked the genuine code in the
+		// newest-wins tiebreak below. InternalDate is when THIS server received the
+		// mail — the actual freshness signal, and unspoofable by the sender.
 		when := msg.InternalDate
-		if msg.Envelope != nil && !msg.Envelope.Date.IsZero() {
-			when = msg.Envelope.Date
-		}
-		if !opts.Since.IsZero() && when.Before(opts.Since.Add(-90*time.Second)) {
+		if !withinFreshness(when, opts.Since) {
 			continue
 		}
 		if from != "" && !envelopeFromContains(msg.Envelope, from) {
@@ -189,16 +219,49 @@ func envelopeFromContains(env *imap.Envelope, needle string) bool {
 		return false
 	}
 	for _, a := range env.From {
-		if a == nil {
-			continue
-		}
-		addr := strings.ToLower(a.MailboxName + "@" + a.HostName)
-		if strings.Contains(addr, needle) || strings.Contains(strings.ToLower(a.PersonalName), needle) {
+		if a != nil && senderDomainMatches(strings.ToLower(strings.TrimSpace(a.HostName)), needle) {
 			return true
 		}
 	}
 	return false
 }
+
+// senderDomainMatches reports whether an email's From-address host belongs to the
+// same domain the site is expected to send from ([needle], the site host). It is
+// DOMAIN-ANCHORED, never a bare substring, and it deliberately ignores the display
+// name (PersonalName): the old `Contains(addr, needle) || Contains(personalName,
+// needle)` let any sender pass by (a) setting a display name like "Airbnb.com
+// Security" from an arbitrary address, or (b) sending from a look-alike host such
+// as "airbnb.com.evil.com" whose address string still contains "airbnb.com". A
+// match now requires the host to BE the domain, be a sub-domain of it, or be the
+// parent the site is a sub-domain of (site host = secure.airbnb.com, sender =
+// airbnb.com) — so "airbnb.com.evil.com" (host ends in .evil.com) is rejected.
+func senderDomainMatches(host, needle string) bool {
+	if host == "" || needle == "" {
+		return false
+	}
+	return host == needle ||
+		strings.HasSuffix(host, "."+needle) ||
+		strings.HasSuffix(needle, "."+host)
+}
+
+// withinFreshness reports whether a message received at [when] (the server's
+// InternalDate) is recent enough for a login armed at [since]. A small skew grace
+// tolerates a code that landed just before the arm; a zero [since] means unbounded.
+func withinFreshness(when, since time.Time) bool {
+	if since.IsZero() {
+		return true
+	}
+	return !when.Before(since.Add(-freshnessSkew))
+}
+
+// ErrIMAPAuth is returned when the mailbox rejects the credential at IMAP LOGIN — a
+// revoked or wrong app-password. It is a TYPED sentinel so a caller can tell a dead
+// credential apart from a transient reach failure or a "no code yet", and surface the
+// mailbox as broken (needs re-linking) instead of retrying a credential that will
+// never work. The message stays STATIC and is never wrapped with the credential: an
+// IMAP LOGIN error can echo the password, so only this fixed text is surfaced.
+var ErrIMAPAuth = errors.New("otp: IMAP login failed")
 
 // Compile-time assertion that IMAPMailbox satisfies MailboxReader.
 var _ MailboxReader = IMAPMailbox{}

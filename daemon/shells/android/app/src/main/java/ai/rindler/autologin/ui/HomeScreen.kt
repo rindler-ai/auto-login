@@ -16,11 +16,14 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.Language
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Checklist
 import androidx.compose.material.icons.rounded.Dialpad
 import androidx.compose.material.icons.rounded.Lock
+import androidx.compose.material.icons.rounded.MailOutline
+import androidx.compose.material.icons.rounded.WarningAmber
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -48,6 +51,7 @@ fun HomeScreen(
     onSettings: () -> Unit,
     onEnterCode: () -> Unit,
     onFinishSetup: () -> Unit = {},
+    onManageEmails: () -> Unit = {},
 ) {
     val ctx = LocalContext.current
     val cs = MaterialTheme.colorScheme
@@ -110,6 +114,12 @@ fun HomeScreen(
     fun smsAutoReadActive(): Boolean = store.isSmsAutoReadEnabled() && SmsAutoRead.hasPermission(ctx)
     var smsActive by remember { mutableStateOf(smsAutoReadActive()) }
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { smsActive = smsAutoReadActive() }
+    // Linked mailboxes — re-derived on resume so a mailbox that broke while the poll ran (or
+    // was added/removed on the manage page) is reflected without a manual refresh. Drives the
+    // conditional Home email row: ABSENT when nothing is linked, a live "reading from N"
+    // when healthy, and a warning badge when a mailbox went bad.
+    var linkedEmails by remember { mutableStateOf(store.linkedEmails()) }
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { linkedEmails = store.linkedEmails() }
     // Shown only after the checklist has been seen (before that it is an interstitial, not
     // a nudge), never after "Don't remind me", and never once both steps are done.
     val showSetupNudge = store.isSetupSeen() && !store.isSetupNudgeDismissed() && stepsLeft > 0
@@ -148,6 +158,42 @@ fun HomeScreen(
                 supporting = if (stepsLeft == 1) "1 step left" else "$stepsLeft steps left",
                 trailing = RowTrailing.Chevron,
                 onClick = onFinishSetup,
+            )
+        }
+
+        // Linked mailboxes — a peer of the "Finish setting up" nudge beneath the header.
+        // ABSENT when nothing is linked (declining email is a legitimate final answer);
+        // a live status when healthy; a warning badge naming the broken mailbox when one
+        // stops working. Tapping opens the manage page.
+        if (linkedEmails.isNotEmpty()) {
+            val broken = linkedEmails.filter { it.needsAttention }
+            MediaRow(
+                title = "Email sign-in codes",
+                leading = {
+                    Icon(
+                        if (broken.isNotEmpty()) Icons.Rounded.WarningAmber else Icons.Rounded.MailOutline,
+                        contentDescription = null,
+                        tint = if (broken.isNotEmpty()) warningInk else cs.onSurfaceVariant,
+                        modifier = Modifier.size(24.dp),
+                    )
+                },
+                supporting = when {
+                    broken.isNotEmpty() ->
+                        "Can't open ${ai.rindler.autologin.email.maskEmail(broken.first().address)} — tap to fix"
+                    linkedEmails.size == 1 -> "Reading codes from 1 address"
+                    else -> "Reading codes from ${linkedEmails.size} addresses"
+                },
+                supportingColor = if (broken.isNotEmpty()) warningInk else null,
+                trailing = {
+                    Icon(
+                        Icons.AutoMirrored.Rounded.KeyboardArrowRight,
+                        contentDescription = null,
+                        tint = cs.onSurfaceVariant,
+                        modifier = Modifier.size(24.dp),
+                    )
+                },
+                onClick = onManageEmails,
+                onClickLabel = "Manage email sign-in codes",
             )
         }
 
