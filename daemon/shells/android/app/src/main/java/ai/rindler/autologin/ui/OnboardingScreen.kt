@@ -1,5 +1,6 @@
 package ai.rindler.autologin.ui
 
+import ai.rindler.autologin.ui.theme.LocalReducedMotion
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateDpAsState
@@ -89,10 +90,15 @@ fun OnboardingScreen(onDone: () -> Unit) {
     val scope = rememberCoroutineScope()
     val cs = MaterialTheme.colorScheme
     val last = pager.currentPage == slides.lastIndex
+    // Reduced motion: jump between slides instantly instead of the horizontal slide.
+    val reduced = LocalReducedMotion.current
+    suspend fun goToPage(page: Int) {
+        if (reduced) pager.scrollToPage(page) else pager.animateScrollToPage(page)
+    }
 
     // Back steps to the previous slide instead of exiting the app.
     BackHandler(enabled = pager.currentPage > 0) {
-        scope.launch { pager.animateScrollToPage(pager.currentPage - 1) }
+        scope.launch { goToPage(pager.currentPage - 1) }
     }
 
     Column(
@@ -176,7 +182,7 @@ fun OnboardingScreen(onDone: () -> Unit) {
         PrimaryButton(
             text = if (last) "Get started" else "Continue",
             onClick = {
-                if (last) onDone() else scope.launch { pager.animateScrollToPage(pager.currentPage + 1) }
+                if (last) onDone() else scope.launch { goToPage(pager.currentPage + 1) }
             },
             modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 24.dp),
         )

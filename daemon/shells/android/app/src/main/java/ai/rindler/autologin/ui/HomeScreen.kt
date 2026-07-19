@@ -187,7 +187,15 @@ fun HomeScreen(
                             modifier = Modifier.size(16.dp),
                         )
                     },
+                    // Remove is the ONLY management action for a saved login. It used to hide
+                    // behind an unlabelled long-press — undiscoverable to a screen reader, and
+                    // a fake-affordance ripple on the no-op tap. Now the tap opens the same
+                    // guarded remove dialog and BOTH gestures carry the "Remove login" label,
+                    // so TalkBack announces and can invoke it.
+                    onClick = { pendingDelete = s },
+                    onClickLabel = "Remove login",
                     onLongClick = { pendingDelete = s },
+                    onLongClickLabel = "Remove login",
                 )
             }
             // De-tinted "Add a login" row adjacent to the list (accent budget → neutral).
