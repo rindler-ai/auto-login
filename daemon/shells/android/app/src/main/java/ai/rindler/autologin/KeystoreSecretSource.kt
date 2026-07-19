@@ -20,8 +20,11 @@ import android.content.Context
 import android.content.SharedPreferences
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
+import ai.rindler.autologin.email.EmailMailbox
+import ai.rindler.autologin.email.normalizeEmail
 import ai.rindler.mobile.SecretSource
 import org.json.JSONArray
+import org.json.JSONObject
 import java.io.IOException
 import java.security.GeneralSecurityException
 import java.security.KeyStore
@@ -135,6 +138,16 @@ class KeystoreSecretSource(context: Context) : SecretSource {
         const val K_ONBOARDED = "rindler-meta:onboarded"    // has the intro been seen
         const val K_SMS_AUTOREAD = "rindler-meta:sms-autoread" // user opted into auto-reading 2FA texts
 
+        // Email auto-read opt-in + the DURABLE on-device mailboxes. K_EMAIL_MAILBOXES is a
+        // JSON array of {address, host, appPassword, needsAttention} — each app-password is a
+        // durable mailbox credential, encrypted at rest like a saved site password, that NEVER
+        // transits the server (the Go core dials IMAP directly; only the extracted code is
+        // relayed). Keyed by ADDRESS so multiple mailboxes coexist. K_EMAIL_AUTOREAD is the
+        // global opt-in the reader gates on; set on the first link, cleared when the last
+        // mailbox is removed. Wiped wholesale by reset()/signOut() (they are secrets).
+        const val K_EMAIL_AUTOREAD = "rindler-meta:email-autoread"
+        const val K_EMAIL_MAILBOXES = "rindler-meta:email-mailboxes"
+
         // Post-pairing setup checklist state. Both are EDUCATION state about the human,
         // not account state: once someone has been walked through the reliability
         // switches, re-showing the interstitial (or the Home nudge) on every re-sign-in is
@@ -205,6 +218,113 @@ class KeystoreSecretSource(context: Context) : SecretSource {
 
     fun setSmsAutoReadEnabled(on: Boolean) {
         prefs.edit().putBoolean(K_SMS_AUTOREAD, on).apply()
+    }
+
+    // --- Email auto-read opt-in + durable on-device mailboxes (never leave the device) ---
+
+    /// Whether email auto-read is on. Set true on the first linkEmail, cleared when the last
+    /// mailbox is unlinked. The reader polls only when this is on AND a mailbox is linked AND
+    /// a verified email_otp_code ping opened the window (fail-closed, three gates).
+    fun isEmailAutoReadEnabled(): Boolean = prefs.getBoolean(K_EMAIL_AUTOREAD, false)
+
+    fun setEmailAutoReadEnabled(on: Boolean) {
+        prefs.edit().putBoolean(K_EMAIL_AUTOREAD, on).apply()
+    }
+
+    /// Every linked mailbox (durable on-device credentials). Empty when none / unreadable.
+    fun linkedEmails(): List<EmailMailbox> {
+        val raw = prefs.getString(K_EMAIL_MAILBOXES, null) ?: return emptyList()
+        return runCatching {
+            val arr = JSONArray(raw)
+            (0 until arr.length()).mapNotNull { i ->
+                val o = arr.optJSONObject(i) ?: return@mapNotNull null
+                val address = o.optString("address").takeIf { it.isNotBlank() } ?: return@mapNotNull null
+                val host = o.optString("host").takeIf { it.isNotBlank() } ?: return@mapNotNull null
+                val appPassword = o.optString("appPassword").takeIf { it.isNotEmpty() } ?: return@mapNotNull null
+                EmailMailbox(address, host, appPassword, o.optBoolean("needsAttention", false))
+            }
+        }.getOrDefault(emptyList())
+    }
+
+    /// The linked addresses only (for username autocomplete). Addresses, NEVER a secret.
+    fun linkedEmailAddresses(): List<String> = linkedEmails().map { it.address }
+
+    /// True once at least one mailbox is linked.
+    fun isEmailLinked(): Boolean = linkedEmails().isNotEmpty()
+
+    /// The mailbox linked under [address] (case/space-insensitive), or null.
+    fun emailMailbox(address: String): EmailMailbox? {
+        val key = normalizeEmail(address)
+        return linkedEmails().firstOrNull { normalizeEmail(it.address) == key }
+    }
+
+    /// Any mailbox currently broken (a revoked/wrong app-password) — drives the warning badge.
+    fun emailNeedsAttention(): Boolean = linkedEmails().any { it.needsAttention }
+
+    /// The addresses of the broken mailboxes (for the badge text).
+    fun brokenEmailAddresses(): List<String> = linkedEmails().filter { it.needsAttention }.map { it.address }
+
+    /// Add or replace a mailbox, keyed by ADDRESS (never a single fixed slot — that would
+    /// wrongly overwrite the other mailboxes once plurality exists). A re-link of a broken
+    /// mailbox clears its needsAttention. Turns email auto-read on. One commit.
+    fun linkEmail(address: String, host: String, appPassword: String) {
+        val addr = normalizeEmail(address)
+        val updated = linkedEmails().filterNot { normalizeEmail(it.address) == addr } +
+            EmailMailbox(addr, host.trim(), appPassword, needsAttention = false)
+        prefs.edit()
+            .putString(K_EMAIL_MAILBOXES, mailboxesToJson(updated))
+            .putBoolean(K_EMAIL_AUTOREAD, true)
+            .apply()
+    }
+
+    /// Remove the mailbox under [address]. Its app-password is erased from the encrypted
+    /// store; there is nothing left to dial for it. When the last mailbox goes, email
+    /// auto-read is turned off. The user should also revoke the app-password in their
+    /// provider settings — removing it here stops THIS device using it.
+    fun unlinkEmail(address: String) {
+        val addr = normalizeEmail(address)
+        val updated = linkedEmails().filterNot { normalizeEmail(it.address) == addr }
+        prefs.edit().apply {
+            putString(K_EMAIL_MAILBOXES, mailboxesToJson(updated))
+            if (updated.isEmpty()) putBoolean(K_EMAIL_AUTOREAD, false)
+        }.apply()
+    }
+
+    /// Flag [address] as broken (an IMAP auth failure). Returns true IFF it flipped from
+    /// healthy to broken, so the caller fires the one-shot "mailbox stopped working" notice
+    /// exactly once per breakage — never on every poll tick.
+    fun markEmailNeedsAttention(address: String): Boolean {
+        val addr = normalizeEmail(address)
+        val list = linkedEmails()
+        val idx = list.indexOfFirst { normalizeEmail(it.address) == addr }
+        if (idx < 0 || list[idx].needsAttention) return false
+        val updated = list.toMutableList().also { it[idx] = it[idx].copy(needsAttention = true) }
+        prefs.edit().putString(K_EMAIL_MAILBOXES, mailboxesToJson(updated)).apply()
+        return true
+    }
+
+    /// Clear the broken flag on [address] (a successful read, or a re-link). No-op if healthy.
+    fun clearEmailNeedsAttention(address: String) {
+        val addr = normalizeEmail(address)
+        val list = linkedEmails()
+        val idx = list.indexOfFirst { normalizeEmail(it.address) == addr }
+        if (idx < 0 || !list[idx].needsAttention) return
+        val updated = list.toMutableList().also { it[idx] = it[idx].copy(needsAttention = false) }
+        prefs.edit().putString(K_EMAIL_MAILBOXES, mailboxesToJson(updated)).apply()
+    }
+
+    private fun mailboxesToJson(list: List<EmailMailbox>): String {
+        val arr = JSONArray()
+        for (m in list) {
+            arr.put(
+                JSONObject()
+                    .put("address", m.address)
+                    .put("host", m.host)
+                    .put("appPassword", m.appPassword)
+                    .put("needsAttention", m.needsAttention),
+            )
+        }
+        return arr.toString()
     }
 
     // --- Device-egress proxy opt-in + tunnel token ---

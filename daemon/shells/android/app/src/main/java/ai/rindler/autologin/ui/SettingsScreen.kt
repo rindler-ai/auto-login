@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Logout
+import androidx.compose.material.icons.rounded.MailOutline
 import androidx.compose.material.icons.rounded.Policy
 import androidx.compose.material.icons.rounded.Smartphone
 import androidx.compose.material.icons.rounded.Sync
@@ -50,6 +51,7 @@ fun SettingsScreen(
     onRepair: () -> Unit,
     onSignOut: () -> Unit,
     onAdvanced: () -> Unit,
+    onManageEmails: () -> Unit = {},
 ) {
     val ctx = LocalContext.current
     val cs = MaterialTheme.colorScheme
@@ -134,9 +136,22 @@ fun SettingsScreen(
             // No onClick → no ripple; it's context, not an action.
         )
 
-        // 3. Sign-in codes (SMS auto-read) — shared with the setup checklist.
+        // 3. Sign-in codes (SMS auto-read + linked mailboxes) — shared with the setup checklist.
         SectionHeader("SIGN-IN CODES")
         SmsAutoReadToggle(store)
+        val linkedEmails = store.linkedEmails()
+        SettingRow(
+            leading = Icons.Rounded.MailOutline,
+            title = "Email sign-in codes",
+            supporting = when {
+                linkedEmails.isEmpty() -> "Link a mailbox to read emailed codes on this device"
+                store.emailNeedsAttention() -> "A linked mailbox stopped working — tap to fix"
+                linkedEmails.size == 1 -> "Reading codes from 1 address"
+                else -> "Reading codes from ${linkedEmails.size} addresses"
+            },
+            trailing = RowTrailing.Chevron,
+            onClick = onManageEmails,
+        )
 
         // 4. Reliability — the Doze exemption the always-on relay depends on.
         SectionHeader("RELIABILITY")
