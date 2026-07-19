@@ -27,7 +27,7 @@
 // pre-filling a trigger/action via URL) opens the automation creator, and the
 // numbered steps below carry the user the rest of the way by hand: New Automation
 // -> Message (any sender, "Message Contains" `code`) -> Run Immediately -> add
-// action "Forward message to Auto-Login" (the app's App Intent, referenced here by its
+// action "Forward message to Auto Login" (the app's App Intent, referenced here by its
 // exact title) -> set that action's Message to the automation's Shortcut Input ->
 // Allow Running While Locked. "Test it" then polls last-seen for up to ~90s after
 // prompting the user to text themselves a `code`-containing message, confirming the
@@ -95,7 +95,7 @@ struct SMSRelaySetupView: View {
 
                 Spacer().frame(height: 12)
 
-                Text("Set this up once and Auto-Login can read a text's verification code automatically, instead of you copy-pasting a 2FA code mid-login. Takes about 2 minutes — iOS doesn't let apps create the automation for you, so you'll build a small one yourself with a few taps below.")
+                Text("Set this up once and Auto Login can read a text's verification code automatically, instead of you copy-pasting a 2FA code mid-login. Takes about 2 minutes — iOS doesn't let apps create the automation for you, so you'll build a small one yourself with a few taps below.")
                     .autoLoginText(.bodyMedium)
                     .foregroundStyle(AutoLoginColors.onSurfaceVariant)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -208,7 +208,7 @@ struct SMSRelaySetupView: View {
 
             AppCard {
                 VStack(alignment: .leading, spacing: 14) {
-                    Text("Once the automation above is set up, text yourself a message containing the word \"code\" — for example \"your code is 123456\" — and Auto-Login will confirm the capture here.")
+                    Text("Once the automation above is set up, text yourself a message containing the word \"code\" — for example \"your code is 123456\" — and Auto Login will confirm the capture here.")
                         .autoLoginText(.bodyMedium)
                         .foregroundStyle(AutoLoginColors.onSurfaceVariant)
                         .fixedSize(horizontal: false, vertical: true)
@@ -279,13 +279,13 @@ struct SMSRelaySetupView: View {
 
     // Comment-style guided steps (verbatim flow from the plan): New Automation ->
     // Message (any sender, "Message Contains" `code`) -> Run Immediately -> add
-    // action "Forward message to Auto-Login" -> set its Message to the automation's
+    // action "Forward message to Auto Login" -> set its Message to the automation's
     // Shortcut Input -> Allow Running While Locked.
     private static let guideSteps: [String] = [
         "Tap New Automation.",
         "Pick Message. Leave the sender as Any, then turn on \"Message Contains\" and enter code.",
         "Turn off \"Ask Before Running\" so it runs immediately.",
-        "Tap Next, add an action, and search for \"Auto-Login.\" Add Forward message to Auto-Login.",
+        "Tap Next, add an action, and search for \"Auto Login.\" Add Forward message to Auto Login.",
         "Tap that action's Message field and choose the automation's Shortcut Input as the variable.",
         "Turn on \"Allow Running While Locked,\" then tap Done.",
     ]

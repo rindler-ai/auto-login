@@ -261,7 +261,7 @@ fun HomeScreen(
             icon = { SiteAvatar(site, size = 40) },
             title = { Text("Remove this login?") },
             text = {
-                Text("Auto-Login won't be able to sign you in to $site until you add it again. The stored login is erased from this device.")
+                Text("Auto Login won't be able to sign you in to $site until you add it again. The stored login is erased from this device.")
             },
             confirmButton = {
                 TextButton(onClick = {

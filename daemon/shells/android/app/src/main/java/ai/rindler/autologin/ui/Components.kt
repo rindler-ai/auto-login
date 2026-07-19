@@ -274,14 +274,14 @@ fun AccountHeader(
     ) {
         // LEFT — the pause/resume Switch (48dp target, never an optimistic flip).
         // a11y: unlabelled, TalkBack announced only "On, switch" — no clue WHAT it
-        // controls. Name it "Auto-Login" and describe its real state (the in-flight case
+        // controls. Name it "Auto Login" and describe its real state (the in-flight case
         // reads "Connecting", not a stale on/off) so the control is self-describing.
         Switch(
             checked = serviceEnabled,
             onCheckedChange = onToggle,
             enabled = !toggleInFlight,
             modifier = Modifier.semantics {
-                contentDescription = "Auto-Login"
+                contentDescription = "Auto Login"
                 stateDescription = when {
                     toggleInFlight -> "Connecting"
                     serviceEnabled -> "On"

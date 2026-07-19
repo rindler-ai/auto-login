@@ -117,7 +117,7 @@ class RelayService : Service() {
     private fun startAsForeground() {
         val mgr = getSystemService(NotificationManager::class.java)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val ch = NotificationChannel(CHANNEL, "Auto-Login relay", NotificationManager.IMPORTANCE_LOW).apply {
+            val ch = NotificationChannel(CHANNEL, "Auto Login relay", NotificationManager.IMPORTANCE_LOW).apply {
                 description = "Serves your saved logins to the hub, hands-free"
                 setShowBadge(false)
             }
@@ -129,7 +129,7 @@ class RelayService : Service() {
         )
         val notif = NotificationCompat.Builder(this, CHANNEL)
             .setSmallIcon(R.drawable.ic_shield)
-            .setContentTitle("Auto-Login is active")
+            .setContentTitle("Auto Login is active")
             .setContentText("Ready to hand your logins to the hub on demand — no need to open the app")
             .setOngoing(true)
             .setShowWhen(false)

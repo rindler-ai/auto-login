@@ -3,7 +3,7 @@ package ai.rindler.autologin.ui.theme
 import androidx.compose.ui.graphics.Color
 import androidx.compose.runtime.staticCompositionLocalOf
 
-// Auto-Login palette (redesign §1.1) — two hand-tuned schemes, no dynamic color.
+// Auto Login palette (redesign §1.1) — two hand-tuned schemes, no dynamic color.
 // Identical role semantics both modes; components never branch on theme. Every
 // ratio WCAG-verified. One accent (primary), used only as interactive affordance.
 

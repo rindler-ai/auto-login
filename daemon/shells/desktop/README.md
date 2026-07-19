@@ -30,7 +30,7 @@ Windows/Linux release support remains blocked on the tray UI below.
 
 ```ini
 [Unit]
-Description=Auto-Login credential custody daemon
+Description=Auto Login credential custody daemon
 After=network-online.target
 Wants=network-online.target
 
