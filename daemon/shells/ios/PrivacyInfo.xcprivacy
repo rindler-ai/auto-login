@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  Apple privacy manifest for the Auto-Login iOS/macOS app.
+  Apple privacy manifest for the Auto Login iOS/macOS app.
 
   Two things are declared here, and BOTH were verified empirically against the
   built binaries rather than guessed (guessing is how you earn an ITMS-91053

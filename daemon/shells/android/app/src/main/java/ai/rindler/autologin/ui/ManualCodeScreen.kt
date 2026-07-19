@@ -150,7 +150,7 @@ fun ManualCodeScreen(
             IconBadge(Icons.Rounded.Dialpad, 56.dp)
             Spacer(Modifier.height(16.dp))
             Text(
-                "Type the code your login is waiting for and Auto-Login will submit it.",
+                "Type the code your login is waiting for and Auto Login will submit it.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = cs.onSurfaceVariant,
             )

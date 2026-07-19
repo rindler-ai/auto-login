@@ -124,7 +124,7 @@ struct SettingsView: View {
 
             Spacer()
 
-            Text("Auto-Login · Encrypted on-device storage")
+            Text("Auto Login · Encrypted on-device storage")
                 .autoLoginText(.labelMedium)
                 .foregroundStyle(AutoLoginColors.onSurfaceVariant)
                 .frame(maxWidth: .infinity, alignment: .center)

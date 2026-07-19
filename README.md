@@ -1,4 +1,4 @@
-# Auto-Login
+# Auto Login
 
 [![Latest release](https://img.shields.io/github/v/release/rindler-ai/auto-login?sort=semver&label=latest)](https://github.com/rindler-ai/auto-login/releases/latest)
 [![CI](https://github.com/rindler-ai/auto-login/actions/workflows/ci.yml/badge.svg)](https://github.com/rindler-ai/auto-login/actions/workflows/ci.yml)
@@ -6,7 +6,7 @@
 
 **Sign in to your accounts automatically, without your passwords ever leaving your phone.**
 
-Auto-Login turns your phone into a private vault for your logins. Your passwords,
+Auto Login turns your phone into a private vault for your logins. Your passwords,
 two-factor codes, and email or text sign-in codes are saved only on your own device,
 locked by its hardware security. When something you trust needs to sign in for you
 (for example, an AI assistant doing a task on your behalf), your phone hands over just
@@ -166,7 +166,7 @@ and `daemon/shells/macos`.
 
 ## Hub configuration
 
-**Auto-Login ships without a real hub host. Point it at your own hub.** Every URL
+**Auto Login ships without a real hub host. Point it at your own hub.** Every URL
 in this repository uses the placeholder `your-hub.example`; replace it with the
 host of the server you run.
 
@@ -202,5 +202,5 @@ the golden vector to paper over a mismatch — a divergence is a real interop bu
 
 ## License
 
-Auto-Login is licensed under the GNU Lesser General Public License v3.0
+Auto Login is licensed under the GNU Lesser General Public License v3.0
 (LGPL-3.0). See [`LICENSE`](./LICENSE).

@@ -213,9 +213,9 @@ fun NotificationToggle() {
         leading = Icons.Rounded.Notifications,
         title = "Show status notifications",
         supporting = when {
-            hasPerm -> "On — you'll see a notice while Auto-Login is running"
+            hasPerm -> "On — you'll see a notice while Auto Login is running"
             promptExhausted -> "Blocked — turn notifications on for this app in system settings"
-            else -> "Show a notice while Auto-Login is running in the background"
+            else -> "Show a notice while Auto Login is running in the background"
         },
         trailing = RowTrailing.Switch(
             checked = hasPerm,
@@ -390,7 +390,7 @@ fun EgressToggle(store: KeystoreSecretSource) {
                     // while "Turn on" stayed tappable. Consent the user cannot read is not
                     // consent, so the body scrolls.
                     modifier = Modifier.verticalScroll(rememberScrollState()),
-                    text = "When on, Auto-Login sends your own agent's web traffic through this phone's " +
+                    text = "When on, Auto Login sends your own agent's web traffic through this phone's " +
                         "internet connection. Sites you automate will see this phone's IP address " +
                         "instead of the server's.\n\n" +
                         "Only your own sessions use it. Your connection is never shared with anyone " +

@@ -45,7 +45,7 @@ object EmailHealthNotifier {
             val notif = NotificationCompat.Builder(ctx, CHANNEL)
                 .setSmallIcon(R.drawable.ic_shield)
                 .setContentTitle("Email sign-in codes stopped working")
-                .setContentText("Auto-Login can't open ${maskEmail(address)}. Tap to re-link it.")
+                .setContentText("Auto Login can't open ${maskEmail(address)}. Tap to re-link it.")
                 .setAutoCancel(true)
                 .setContentIntent(open)
                 .setPriority(NotificationCompat.PRIORITY_DEFAULT)

@@ -1,4 +1,4 @@
-// Config — build-time hub configuration for the Auto-Login iOS/macOS shells.
+// Config — build-time hub configuration for the Auto Login iOS/macOS shells.
 //
 // The device hub host is NOT baked into the source tree. It defaults to a
 // placeholder and is overridden per build by setting the `AutoLoginHubHost`

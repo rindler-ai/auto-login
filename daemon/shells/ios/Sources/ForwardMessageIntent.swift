@@ -3,7 +3,7 @@
 // This is the POST action a user's own iOS Shortcuts "Message" automation
 // calls, passing the incoming text as `message`. It is a genuine App Intent
 // (not a distributed `.shortcut` file), so it appears directly in the
-// Shortcuts app's action list under "Auto-Login" and the user's automation can
+// Shortcuts app's action list under "Auto Login" and the user's automation can
 // add it with no "Allow Untrusted Shortcuts" gate.
 //
 // APP-STORE-LEGAL BOUNDARY: this file never reads SMS. The message text is
@@ -55,7 +55,7 @@ import Foundation
 import Custody // MobileExtractOTPCode — the on-device OTP extractor
 
 struct ForwardMessageIntent: AppIntent {
-    static var title: LocalizedStringResource = "Forward message to Auto-Login"
+    static var title: LocalizedStringResource = "Forward message to Auto Login"
     static var description = IntentDescription(
         "Extracts a login code from an incoming text on-device and sends only that code to your hub so it can complete a login."
     )
@@ -132,9 +132,9 @@ enum ForwardMessageError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .notConfigured:
-            return "Auto-Login SMS auto-fill isn't set up yet. Open Auto-Login and finish setup in Settings."
+            return "Auto Login SMS auto-fill isn't set up yet. Open Auto Login and finish setup in Settings."
         case .notPaired:
-            return "This device's pairing is no longer valid. Reopen Auto-Login and re-pair."
+            return "This device's pairing is no longer valid. Reopen Auto Login and re-pair."
         case .unreachable:
             return "Couldn't reach your hub. Check your connection and try again."
         }

@@ -20,7 +20,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 
-// The "settings within settings" Advanced page: point Auto-Login at a self-hosted
+// The "settings within settings" Advanced page: point Auto Login at a self-hosted
 // server instead of the default, and pair with a code. Buried behind Settings ->
 // Advanced (post-auth) and the sign-in screen's "Use a self-hosted server" link
 // (pre-auth bootstrap), so normal users never see server/pairing fields.
@@ -52,7 +52,7 @@ fun AdvancedScreen(
     AppScreen(title = "Advanced", onBack = onBack, footer = true) {
         SectionHeader("SELF-HOSTED SERVER")
         Text(
-            "Most people don't need this. Point Auto-Login at your own server instead of the default.",
+            "Most people don't need this. Point Auto Login at your own server instead of the default.",
             style = MaterialTheme.typography.bodyMedium,
             color = cs.onSurfaceVariant,
             modifier = Modifier.padding(horizontal = 16.dp),

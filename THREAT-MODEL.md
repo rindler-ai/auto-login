@@ -1,8 +1,8 @@
 # Threat Model
 
 This document describes the trust model, guarantees, and residual risks of
-Auto-Login. It is written to be precise about what the design protects and,
-equally, about what it does not. Read it before relying on Auto-Login for anything
+Auto Login. It is written to be precise about what the design protects and,
+equally, about what it does not. Read it before relying on Auto Login for anything
 sensitive.
 
 ## System overview
