@@ -8,6 +8,7 @@ import ai.rindler.autologin.deriveConnectionStatus
 import ai.rindler.autologin.fetchSupportedSites
 import ai.rindler.autologin.normalizeSiteKey
 import ai.rindler.autologin.sms.SmsAutoRead
+import android.os.SystemClock
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -38,6 +39,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
+import kotlinx.coroutines.delay
 
 @Composable
 fun HomeScreen(
@@ -61,6 +63,22 @@ fun HomeScreen(
     // pairing, or a START_STICKY restart).
     LaunchedEffect(running) { requested = running }
     val header = headerState(running, requested)
+    // Bound the in-flight window (§4b). If a toggle never lands — the service early-returns
+    // because the device predates the serverPubkey change, or Mobile.start throws — inFlight
+    // would otherwise stay true forever, freezing the status on "Connecting…" and DISABLING
+    // the switch, which is the only recovery control. When in flight, wait out the timeout;
+    // if `running` still hasn't caught up, snap `requested` back to the truth so the switch
+    // re-enables and the status stops lying. Keyed on (requested, running): a real connect
+    // flips `running` in well under a second, which cancels + relaunches this effect with
+    // inFlight == false, so the fast path never flashes a reset.
+    LaunchedEffect(requested, running) {
+        if (!header.inFlight) return@LaunchedEffect
+        val startedAt = SystemClock.elapsedRealtime()
+        while (!shouldForceReconcile(inFlight = true, elapsedMs = SystemClock.elapsedRealtime() - startedAt)) {
+            delay(RELAY_INFLIGHT_POLL_MS)
+        }
+        requested = running
+    }
     var sites by remember { mutableStateOf(store.sites()) }
     // Supported-site domains (normalized) from the live catalog, so a saved login for
     // a site the hub hasn't mapped yet is badged with a warning. Empty until loaded /

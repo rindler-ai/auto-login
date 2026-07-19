@@ -13,6 +13,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -36,10 +37,13 @@ fun AdvancedScreen(
     // prefilled, because for them it is not a disclosure; everyone else gets the
     // placeholder.
     val configured = store.hubUrl()
-    var hub by remember {
+    // rememberSaveable so a rotation mid-entry does not wipe a hand-typed server
+    // address and pairing code (§4d — the same half-typed-form loss fixed on the
+    // sign-in forms; these two fields are the self-hoster's equivalent).
+    var hub by rememberSaveable {
         mutableStateOf(if (configured != null && configured != BuildConfig.HUB_URL) configured else "")
     }
-    var code by remember { mutableStateOf("") }
+    var code by rememberSaveable { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
