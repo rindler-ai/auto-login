@@ -22,6 +22,7 @@ import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
@@ -29,11 +30,11 @@ import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
@@ -92,11 +93,24 @@ import coil.compose.SubcomposeAsyncImage
 
 private const val TINT_MS = 120 // surface → surfaceContainer scroll tint
 
+/** The widest the centred content column is ever laid out (see [cappedContentWidth]). */
+private val MaxContentWidth = 560.dp
+
+/**
+ * The width the scaffold gives its content column: the available width, capped at [cap]
+ * so the layout does not stretch edge-to-edge on a wide screen (tablet / unfolded
+ * foldable). Below the cap the content simply uses the full available width. Pure so it
+ * can be unit-tested (Compose measurement itself cannot be observed in a JVM test).
+ */
+internal fun cappedContentWidth(available: Dp, cap: Dp): Dp = if (available < cap) available else cap
+
 /**
  * 1. AppScreen — the single scaffold: pinned top bar → scrolling middle → optional
  * pinned [TrustFooter]. `topBar` receives whether the content has scrolled (so it
  * can tint). Content gets NO default horizontal padding: rows are full-bleed and
- * text/field blocks pad themselves 16dp.
+ * text/field blocks pad themselves 16dp. The top bar and footer span full width; only
+ * the scrolling content is capped at [MaxContentWidth] and centred, so on a wide screen
+ * (tablet / unfolded foldable) the rows do not stretch edge-to-edge.
  */
 @Composable
 fun AppScreen(
@@ -108,13 +122,19 @@ fun AppScreen(
     val scroll = rememberScrollState()
     Column(modifier.fillMaxSize()) {
         topBar(scroll.value > 0)
-        Column(
+        BoxWithConstraints(
             Modifier
                 .weight(1f)
                 .fillMaxWidth()
                 .verticalScroll(scroll),
-            content = content,
-        )
+        ) {
+            Column(
+                Modifier
+                    .align(Alignment.TopCenter)
+                    .width(cappedContentWidth(maxWidth, MaxContentWidth)),
+                content = content,
+            )
+        }
         if (footer) TrustFooter()
     }
 }
@@ -273,7 +293,20 @@ fun AccountHeader(
             ) {
                 StatusDot(status == ConnectionStatus.CONNECTING, statusColor)
                 Spacer(Modifier.width(6.dp))
-                Text(statusText, style = MaterialTheme.typography.bodyMedium, color = statusColor)
+                Text(
+                    statusText,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = statusColor,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    // weight(fill = false): the status text yields the trailing space the
+                    // warning icon needs instead of eating the whole row. The icon is
+                    // UNWEIGHTED, so it is measured first and always gets its 14dp; without
+                    // this the text consumed all the width and `Modifier.size(14.dp)` was
+                    // coerced into the 0-width slot left over — the attention icon silently
+                    // vanished in the exact (OFFLINE_RETRYING) state it exists to flag.
+                    modifier = Modifier.weight(1f, fill = false),
+                )
                 if (showWarnIcon) {
                     Spacer(Modifier.width(6.dp))
                     Icon(
@@ -489,6 +522,13 @@ fun SettingRow(
                     trailing.text,
                     style = MaterialTheme.typography.bodyMedium,
                     color = cs.onSurfaceVariant,
+                    // The title Column holds the row's weight, so an unconstrained trailing
+                    // value is measured first and a long one would starve the title or blow
+                    // out the row. Cap the width and ellipsize so it truncates instead,
+                    // consistent with the fixed-size Chevron / Switch trailing variants.
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.widthIn(max = 160.dp),
                 )
             }
         }
@@ -779,7 +819,9 @@ fun PrimaryButton(
         modifier = modifier
             .scale(scale)
             .fillMaxWidth()
-            .height(54.dp),
+            // heightIn, not a fixed height: the 54dp is a MINIMUM, so at a large font scale
+            // the label sets the height and never clips (the TopBar fix, applied to buttons).
+            .heightIn(min = 54.dp),
     ) {
         Box(contentAlignment = Alignment.Center) {
             if (loading) {
@@ -817,7 +859,9 @@ fun SecondaryButton(
         modifier = modifier
             .scale(scale)
             .fillMaxWidth()
-            .height(54.dp),
+            // heightIn, not a fixed height: the 54dp is a MINIMUM, so at a large font scale
+            // the label sets the height and never clips (the TopBar fix, applied to buttons).
+            .heightIn(min = 54.dp),
     ) {
         Row(
             Modifier.padding(horizontal = 20.dp),
