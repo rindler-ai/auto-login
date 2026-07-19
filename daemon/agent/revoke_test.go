@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -71,18 +72,69 @@ func TestRevokeSelf_SendsOnlyBearerToken(t *testing.T) {
 }
 
 func TestRevokeSelf_Errors(t *testing.T) {
-	t.Run("non-2xx is surfaced, not swallowed", func(t *testing.T) {
-		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			w.WriteHeader(http.StatusUnauthorized)
-		}))
-		defer srv.Close()
-		hub := "ws://" + strings.TrimPrefix(srv.URL, "http://") + "/v1/devices/connect"
-		err := RevokeSelf(context.Background(), hub, "cd_dev_dead")
-		if err == nil {
-			t.Fatal("a 401 must be returned as an error — the device is still linked")
+	// A token the server will not authenticate cannot unlink anything, so the
+	// device is ALREADY unlinked as far as this token can ever tell — the common
+	// causes are a revoke from the web and the 30-day inactivity sweep. Reporting
+	// that as a transport failure sent the user hunting for a device row that no
+	// longer exists, and the retry it invited could only 401 again. Signalled as a
+	// sentinel so callers match on errors.Is, not on message text (the message
+	// crosses gomobile as a bare string and would be brittle to compare).
+	t.Run("a dead token means already unlinked", func(t *testing.T) {
+		for _, code := range []int{http.StatusUnauthorized, http.StatusNotFound} {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(code)
+			}))
+			hub := "ws://" + strings.TrimPrefix(srv.URL, "http://") + "/v1/devices/connect"
+			err := RevokeSelf(context.Background(), hub, "cd_dev_dead")
+			srv.Close()
+			if !errors.Is(err, ErrAlreadyUnlinked) {
+				t.Errorf("status %d: want ErrAlreadyUnlinked, got %v", code, err)
+			}
+			if err != nil && strings.Contains(err.Error(), "cd_dev_dead") {
+				t.Errorf("status %d: error echoes the device token: %v", code, err)
+			}
 		}
-		if strings.Contains(err.Error(), "cd_dev_dead") {
-			t.Errorf("error echoes the device token: %v", err)
+	})
+
+	// The direction that actually costs the user something: treating a real
+	// server-side failure as "already unlinked" wipes the phone locally while a
+	// LIVE device row stays on the account, and the user has no way left to reach
+	// it. A 5xx and a dead connection must both stay hard failures.
+	t.Run("a real failure is never reported as already-unlinked", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusInternalServerError)
+		}))
+		hub := "ws://" + strings.TrimPrefix(srv.URL, "http://") + "/v1/devices/connect"
+		err := RevokeSelf(context.Background(), hub, "cd_dev_live")
+		srv.Close()
+		if err == nil {
+			t.Fatal("a 500 must be an error — this device may still be linked")
+		}
+		if errors.Is(err, ErrAlreadyUnlinked) {
+			t.Errorf("a 500 must NOT be treated as already-unlinked: %v", err)
+		}
+
+		// Same for a hub that is not answering at all: srv is already closed.
+		err = RevokeSelf(context.Background(), hub, "cd_dev_live")
+		if err == nil {
+			t.Fatal("an unreachable hub must be an error")
+		}
+		if errors.Is(err, ErrAlreadyUnlinked) {
+			t.Errorf("an unreachable hub must NOT be treated as already-unlinked: %v", err)
+		}
+	})
+
+	t.Run("2xx unlinks", func(t *testing.T) {
+		for _, code := range []int{http.StatusNoContent, http.StatusOK} {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(code)
+			}))
+			hub := "ws://" + strings.TrimPrefix(srv.URL, "http://") + "/v1/devices/connect"
+			err := RevokeSelf(context.Background(), hub, "cd_dev_ok")
+			srv.Close()
+			if err != nil {
+				t.Errorf("status %d: want nil, got %v", code, err)
+			}
 		}
 	})
 

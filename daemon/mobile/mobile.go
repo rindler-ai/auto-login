@@ -222,7 +222,16 @@ func Pair(pairURL, pairingCode, deviceName, platform, devicePubkeyB64 string) (*
 // telling the user the account is still linked. Signature stays gomobile-safe
 // (strings + error).
 func Unpair(hubURL, deviceToken string) error {
-	return agent.RevokeSelf(context.Background(), hubURL, deviceToken)
+	err := agent.RevokeSelf(context.Background(), hubURL, deviceToken)
+	// Unpair's contract is "ensure this device is off the account", so a device
+	// the server already considers gone satisfies it. Collapsed to nil HERE rather
+	// than in RevokeSelf so the Go core keeps the distinction (and can be tested on
+	// it), while the shell — which only gets a bare string across gomobile and
+	// could not match reliably on it — sees the plain success it should act on.
+	if errors.Is(err, agent.ErrAlreadyUnlinked) {
+		return nil
+	}
+	return err
 }
 
 // --- internals (not part of the bound surface) ---

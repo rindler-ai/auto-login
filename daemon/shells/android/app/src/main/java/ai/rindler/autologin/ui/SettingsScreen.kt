@@ -91,12 +91,19 @@ fun SettingsScreen(
             signingOut = false
             result.fold(
                 onSuccess = { wipeAndLeave() },
+                // Reaching here now means a GENUINE failure — a server error, or no
+                // route to it. A device the server has already unlinked (revoked from
+                // the web, or swept for inactivity) returns success from Mobile.unpair
+                // and takes the wipeAndLeave path above, because that is the state the
+                // user asked for. Saying "still linked" there sent people looking for a
+                // device row that no longer existed, and the retry it invited could
+                // only fail the same way.
                 onFailure = {
                     signOutError =
-                        "Couldn't reach the server to unlink this phone, so it's still " +
-                            "linked to your account. Check your connection and try again, or " +
-                            "sign out anyway — your saved logins are erased from this phone, " +
-                            "but it stays listed on your account until you remove it there."
+                        "Couldn't unlink this phone, so it's still linked to your " +
+                            "account. Try again in a moment, or sign out anyway — your " +
+                            "saved logins are erased from this phone, but it stays listed " +
+                            "on your account until you remove it there."
                 },
             )
         }
