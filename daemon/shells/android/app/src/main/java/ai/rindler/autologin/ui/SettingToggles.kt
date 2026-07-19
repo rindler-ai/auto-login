@@ -267,6 +267,25 @@ fun EgressToggle(store: KeystoreSecretSource) {
     // unreachable gateway or a handshake failure). Without this, the toggle read "On" even
     // when nothing was relaying.
     var connected by remember { mutableStateOf(RelayService.egressConnected()) }
+    // Re-derive on resume — the same ON_RESUME truth-refresh HomeScreen uses for smsActive
+    // (§4c). `active` was read ONCE at composition, so if RelayService reconciled egress OFF
+    // behind the UI's back (it drops a permanently-rejected tunnel and clears the stored
+    // flag in reconcileEgress) the switch would keep showing "Turning on…"/"On" over a
+    // tunnel that is already gone. On resume: honour a permanent termination exactly as the
+    // poll loop does, else re-read the persisted opt-in, then refresh the live handshake
+    // state. Setting `active` here also relaunches LaunchedEffect(active) below, so its poll
+    // loop follows the store rather than fighting it.
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+        if (RelayService.egressTerminated()) {
+            store.unlinkEgress()
+            RelayService.ensureRunning(ctx)
+            active = false
+            failed = true
+        } else {
+            active = store.isEgressEnabled()
+        }
+        connected = RelayService.egressConnected()
+    }
     LaunchedEffect(active) {
         while (active) {
             // A permanent rejection (token revoked/rotated) means the tunnel will never

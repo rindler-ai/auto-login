@@ -34,6 +34,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.Saver
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -42,7 +44,26 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 
-private enum class Dest { Onboarding, Pair, Completing, Setup, Home, Enroll, Settings, ManualCode, Advanced }
+internal enum class Dest { Onboarding, Pair, Completing, Setup, Home, Enroll, Settings, ManualCode, Advanced }
+
+/**
+ * Map a RESTORED destination to a safe landing screen (§4d). Every screen restores
+ * unchanged so a rotation / process-death recreate keeps the user where they were —
+ * EXCEPT [Dest.Completing], the uninterruptible in-flight pairing step. Its pairing
+ * coroutine (a LaunchedEffect / rememberCoroutineScope job) does not survive recreation,
+ * so restoring INTO it would strand a dead spinner with no active enroll; it lands on
+ * [Dest.Pair], where CompletingScreen's own retry goes. Pure; unit-tested (NavRestoreTest).
+ */
+internal fun restoredDest(saved: Dest): Dest = if (saved == Dest.Completing) Dest.Pair else saved
+
+// Persist navigation across a config change (rotation) or a process-death recreate so a
+// half-typed manual 2FA code / login form is not dropped back to the start screen (§4d).
+// The Dest enum is saved by name; the initial-destination `when` below runs only on a
+// genuine first composition (no saved value), matching the pre-existing behaviour.
+private val DestSaver: Saver<Dest, String> = Saver(
+    save = { it.name },
+    restore = { name -> restoredDest(runCatching { Dest.valueOf(name) }.getOrDefault(Dest.Home)) },
+)
 
 @Composable
 fun AutoLoginApp(
@@ -51,7 +72,10 @@ fun AutoLoginApp(
     onEnrollConsumed: () -> Unit = {},
 ) {
     val ctx = LocalContext.current
-    var dest by remember {
+    // rememberSaveable so a rotation keeps the current screen instead of resetting to the
+    // start (§4d). The initial `when` runs only on a first composition (no saved value);
+    // on a recreate the saved Dest is restored via DestSaver.
+    var dest by rememberSaveable(stateSaver = DestSaver) {
         mutableStateOf(
             when {
                 !store.isOnboarded() -> Dest.Onboarding
@@ -64,11 +88,13 @@ fun AutoLoginApp(
         )
     }
     // A forward move slides in from the right; a back move (to a lower-ranked dest)
-    // slides in from the left. Purely presentational.
-    var forward by remember { mutableStateOf(true) }
+    // slides in from the left. Purely presentational — saved so the restored screen
+    // animates in from the right direction after a recreate.
+    var forward by rememberSaveable { mutableStateOf(true) }
     // Which chrome the checklist wears: the pinned-CTA interstitial (post-pairing) or the
     // pushed screen with a back arrow + "Don't remind me" (reached from the Home nudge).
-    var setupFromHome by remember { mutableStateOf(false) }
+    // Saved so a rotation on the Setup screen keeps the right chrome.
+    var setupFromHome by rememberSaveable { mutableStateOf(false) }
     fun go(next: Dest, isForward: Boolean = true) { forward = isForward; dest = next }
     // Every post-pairing route to Home passes through here: a device that has never seen
     // the reliability checklist gets it once, and only once.

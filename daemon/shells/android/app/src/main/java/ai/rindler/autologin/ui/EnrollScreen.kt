@@ -34,6 +34,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -48,8 +49,13 @@ import org.json.JSONObject
 
 @Composable
 fun EnrollScreen(store: KeystoreSecretSource, onDone: () -> Unit) {
-    var site by remember { mutableStateOf("") }
-    var username by remember { mutableStateOf("") }
+    // rememberSaveable for the non-secret fields so a rotation mid-entry keeps the
+    // half-typed login form (§4d). The PASSWORD deliberately stays plain remember: a
+    // password must never be written into the system-serialized state bundle, so it is
+    // cleared on a recreate by design — the one field the user re-enters. `pwVisible`
+    // stays remember too (it only gates showing a now-empty field).
+    var site by rememberSaveable { mutableStateOf("") }
+    var username by rememberSaveable { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var pwVisible by remember { mutableStateOf(false) }
     // Supported-site catalog, fetched live so the list auto-updates as new sites are

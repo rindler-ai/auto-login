@@ -44,3 +44,35 @@ fun headerState(running: Boolean, requested: Boolean): HeaderState {
         inFlight = inFlight,
     )
 }
+
+/**
+ * The longest a relay toggle may sit "in flight" (requested != running) before the header
+ * stops trusting it and snaps back to the truth. A real connect lands in well under a
+ * second, so this is long enough that a healthy connect never trips it, yet short enough
+ * that a toggle that can NEVER land unsticks in a few seconds instead of freezing forever.
+ *
+ * Without this bound, a toggle whose service never reports `running` — a device paired
+ * before the serverPubkey change, where RelayService.ensureRunning early-returns, or a
+ * Mobile.start that throws — leaves inFlight true forever: the status reads "Connecting…"
+ * AND the switch is disabled (because in-flight), and the switch is the only recovery
+ * control. A permanent dead end. (§4b)
+ */
+const val RELAY_INFLIGHT_TIMEOUT_MS: Long = 9_000L
+
+/** How often the in-flight bound is re-checked while waiting out the timeout. */
+const val RELAY_INFLIGHT_POLL_MS: Long = 250L
+
+/**
+ * Decide whether an in-flight relay toggle has waited long enough that the header must
+ * abandon it and reconcile `requested` back to the actual `running` state. Pure, so the
+ * timeout POLICY is unit-tested (HomeInFlightTimeoutTest) independently of the
+ * LaunchedEffect in HomeScreen that measures the elapsed time and performs the reset.
+ *
+ * @param inFlight whether the requested state still disagrees with the actual state.
+ * @param elapsedMs how long the toggle has been in flight.
+ * @return true iff it is still in flight AND has reached [RELAY_INFLIGHT_TIMEOUT_MS]. A
+ *   settled header (inFlight == false) never reconciles, whatever the elapsed time; the
+ *   boundary is inclusive so the reset fires exactly at the timeout, not a poll later.
+ */
+fun shouldForceReconcile(inFlight: Boolean, elapsedMs: Long): Boolean =
+    inFlight && elapsedMs >= RELAY_INFLIGHT_TIMEOUT_MS

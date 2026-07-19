@@ -45,7 +45,15 @@ class MainActivity : FragmentActivity() {
             WindowManager.LayoutParams.FLAG_SECURE,
             WindowManager.LayoutParams.FLAG_SECURE,
         )
-        handleEnrollIntent(intent)
+        // Only a FRESH create may act on its launch intent. On a config-change or
+        // process-death recreate, getIntent() still holds the ORIGINAL autologin://paired
+        // deep link, whose single-use pairing token the first create already consumed —
+        // re-parsing it replays a spent token and pops a bogus pairing failure / re-link
+        // dialog seconds after a successful sign-in. A genuinely NEW warm link arrives via
+        // onNewIntent instead, which is unaffected. (§4a)
+        if (shouldHandleLaunchIntent(savedInstanceState == null)) {
+            handleEnrollIntent(intent)
+        }
         enableEdgeToEdge()
         setContent {
             AutoLoginTheme {
@@ -64,9 +72,18 @@ class MainActivity : FragmentActivity() {
         handleEnrollIntent(intent)
     }
 
-    // Extract a sign-in enrollment token from a deep-link intent, if present.
+    // Extract a sign-in enrollment token from a deep-link intent, if present, then CONSUME
+    // it so it can never be read twice. Clearing the stored intent's data (and re-setting
+    // it) means even a later process-death recreate that restored savedInstanceState finds
+    // no link to replay: parseEnrollUri(null) == null. The pairing token is single-use, so
+    // a second read only ever produces a failure. (§4a)
     private fun handleEnrollIntent(intent: Intent?) {
-        parseEnrollUri(intent?.data)?.let { pendingEnroll = it }
+        intent ?: return
+        parseEnrollUri(intent.data)?.let {
+            pendingEnroll = it
+            intent.data = null
+            setIntent(intent)
+        }
     }
 
     override fun onStart() {
@@ -90,3 +107,10 @@ class MainActivity : FragmentActivity() {
         }
     }
 }
+
+// Whether THIS onCreate may act on its launch intent (getIntent()). Only a fresh create
+// (savedInstanceState == null) may: a recreate re-delivers the original, already-consumed
+// autologin://paired deep link via getIntent(), so re-handling it replays a spent pairing
+// token. A warm link arrives through onNewIntent, which never routes through here. Pure so
+// the guard is unit-tested (MainActivityIntentTest) without an Activity. (§4a)
+internal fun shouldHandleLaunchIntent(isFreshCreate: Boolean): Boolean = isFreshCreate
