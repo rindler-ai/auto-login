@@ -7,6 +7,7 @@
 package ai.rindler.autologin
 
 import ai.rindler.autologin.ui.AutoLoginApp
+import ai.rindler.autologin.ui.Dest
 import ai.rindler.autologin.ui.EnrollRequest
 import ai.rindler.autologin.ui.parseEnrollUri
 import ai.rindler.autologin.ui.theme.AutoLoginTheme
@@ -54,6 +55,19 @@ class MainActivity : FragmentActivity() {
         if (shouldHandleLaunchIntent(savedInstanceState == null)) {
             handleEnrollIntent(intent)
         }
+        // A "code needed" notification tap carries EXTRA_NAV = manual_code. Honour it ONLY on
+        // a fresh create (savedInstanceState == null): it is the INITIAL landing screen, not a
+        // per-recreate override — a recreate must keep the user's restored screen (§4d), and
+        // getIntent() still holds this extra after a recreate, so gating it here (like the
+        // enroll deep link, §4a) keeps a rotation from yanking them back to manual entry.
+        val initialDest: Dest? =
+            if (savedInstanceState == null &&
+                intent?.getStringExtra(CodeNeededNotifier.EXTRA_NAV) == CodeNeededNotifier.NAV_MANUAL_CODE
+            ) {
+                Dest.ManualCode
+            } else {
+                null
+            }
         enableEdgeToEdge()
         setContent {
             AutoLoginTheme {
@@ -61,6 +75,7 @@ class MainActivity : FragmentActivity() {
                     store = KeystoreSecretSource(applicationContext),
                     pendingEnroll = pendingEnroll,
                     onEnrollConsumed = { pendingEnroll = null },
+                    initialDest = initialDest,
                 )
             }
         }
