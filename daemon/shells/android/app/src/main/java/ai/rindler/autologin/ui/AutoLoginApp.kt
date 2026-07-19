@@ -44,6 +44,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 internal enum class Dest { Onboarding, Pair, Completing, Setup, Home, Enroll, Settings, ManualCode, Advanced, LinkedEmails }
@@ -120,6 +123,31 @@ internal fun AutoLoginApp(
     fun goPostPair() {
         setupFromHome = false // the interstitial chrome, whatever the last visit used
         go(if (!store.isSetupSeen()) Dest.Setup else Dest.Home)
+    }
+
+    // Auto sign-out when the hub REVOKES this device server-side (§4). RelayService
+    // detects the revoke, wipes local identity (store.signOut()) and raises wasRevoked
+    // (snapshot state). Two halves, mirroring the egress terminated() handling:
+    //  - DRIVE detection while foregrounded: tick RelayService.reconcileRevocation on a
+    //    poll loop + on ON_RESUME (a revoke arriving while the app sits open still lands).
+    //    A transient drop (offline/airplane mode) never flips revoked(), so this is inert
+    //    then — losing the network must never sign the user out.
+    //  - REACT: when wasRevoked flips true the store is already wiped, so route to
+    //    Sign-in and clear the one-shot. A backgrounded app needs no navigation here — the
+    //    wiped token makes the initial-dest `when` above land on Dest.Pair next launch.
+    LaunchedEffect(Unit) {
+        while (true) {
+            RelayService.reconcileRevocation(ctx)
+            delay(2000)
+        }
+    }
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { RelayService.reconcileRevocation(ctx) }
+    val wasRevoked = RelayService.wasRevoked
+    LaunchedEffect(wasRevoked) {
+        if (wasRevoked) {
+            if (dest != Dest.Pair) go(Dest.Pair, isForward = false)
+            RelayService.clearRevoked()
+        }
     }
 
     // Sign-in enrollment: an autologin://paired deep link arrives via MainActivity as
