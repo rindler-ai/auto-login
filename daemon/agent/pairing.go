@@ -156,6 +156,15 @@ func PairURLFromHub(hubURL, override string) (string, error) {
 	if override != "" {
 		return override, nil
 	}
+	return endpointFromHub(hubURL, "/devices/pair/complete")
+}
+
+// endpointFromHub maps a hub websocket URL to a sibling HTTP endpoint on the
+// SAME host+port: wss://host/v1/devices/connect + "/devices/x" ->
+// https://host/devices/x (ws:// -> http:// for a dev/plaintext hub). Shared by
+// PairURLFromHub and RevokeURLFromHub so every device endpoint is derived one
+// way and cannot drift apart.
+func endpointFromHub(hubURL, path string) (string, error) {
 	u, err := url.Parse(hubURL)
 	if err != nil {
 		return "", fmt.Errorf("pairing: bad hub url %q: %w", hubURL, err)
@@ -164,5 +173,5 @@ func PairURLFromHub(hubURL, override string) (string, error) {
 	if strings.EqualFold(u.Scheme, "ws") {
 		scheme = "http" // dev/plaintext hub → plaintext pairing
 	}
-	return (&url.URL{Scheme: scheme, Host: u.Host, Path: "/devices/pair/complete"}).String(), nil
+	return (&url.URL{Scheme: scheme, Host: u.Host, Path: path}).String(), nil
 }

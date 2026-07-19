@@ -54,6 +54,14 @@ class KeystoreSecretSource(context: Context) : SecretSource {
         const val K_SITE_INDEX = "rindler-meta:sites"       // JSON array of enrolled sites
         const val K_ONBOARDED = "rindler-meta:onboarded"    // has the intro been seen
         const val K_SMS_AUTOREAD = "rindler-meta:sms-autoread" // user opted into auto-reading 2FA texts
+
+        // Post-pairing setup checklist state. Both are EDUCATION state about the human,
+        // not account state: once someone has been walked through the reliability
+        // switches, re-showing the interstitial (or the Home nudge) on every re-sign-in is
+        // exactly the nag that makes people distrust the app. signOut() therefore
+        // preserves both alongside K_ONBOARDED; only reset() ("Reset device") wipes them.
+        const val K_SETUP_SEEN = "rindler-meta:setup-seen"
+        const val K_SETUP_NUDGE_DISMISSED = "rindler-meta:setup-nudge-dismissed"
         const val K_HUB_URL = "rindler-meta:hub-url"        // the hub this device pairs + connects to
 
         // Device-egress proxy opt-in + the durable egress token. When ON, the paired
@@ -63,6 +71,35 @@ class KeystoreSecretSource(context: Context) : SecretSource {
         const val K_EGRESS_ENABLED = "rindler-meta:egress-enabled"
         const val K_EGRESS_TOKEN = "rindler-meta:egress-token"     // rt_live_ per-user tunnel token
         const val K_EGRESS_GATEWAY = "rindler-meta:egress-gateway" // wss:// tunnel gateway URL
+
+        // Rindler account identity, captured at sign-in enroll completion (from Clerk)
+        // and shown by AccountHeader. Not credentials — just who this device is linked
+        // as. Written once at sign-in; wiped by reset()/clear() on sign-out.
+        const val K_ACCOUNT_EMAIL = "rindler-meta:account-email"
+        const val K_ACCOUNT_AVATAR = "rindler-meta:account-avatar" // Google avatar URL
+    }
+
+    // --- Rindler account identity (drives AccountHeader; Phase C wires the writes) ---
+
+    /// The signed-in Rindler account email, or null if not stored (legacy pairing).
+    fun accountEmail(): String? = prefs.getString(K_ACCOUNT_EMAIL, null)?.takeIf { it.isNotBlank() }
+
+    /// The signed-in account's avatar URL (Google photo), or null. Coil renders it in
+    /// AccountHeader; a null falls back to initials.
+    fun avatarUrl(): String? = prefs.getString(K_ACCOUNT_AVATAR, null)?.takeIf { it.isNotBlank() }
+
+    /// Persist (or clear, on null/blank) the account email. Cleared wholesale by reset().
+    fun setAccountEmail(email: String?) {
+        prefs.edit().apply {
+            if (email.isNullOrBlank()) remove(K_ACCOUNT_EMAIL) else putString(K_ACCOUNT_EMAIL, email.trim())
+        }.apply()
+    }
+
+    /// Persist (or clear, on null/blank) the avatar URL. Cleared wholesale by reset().
+    fun setAvatarUrl(url: String?) {
+        prefs.edit().apply {
+            if (url.isNullOrBlank()) remove(K_ACCOUNT_AVATAR) else putString(K_ACCOUNT_AVATAR, url.trim())
+        }.apply()
     }
 
     // --- hub URL (which hub this device pairs + connects to) ---
@@ -139,6 +176,24 @@ class KeystoreSecretSource(context: Context) : SecretSource {
         prefs.edit().putBoolean(K_ONBOARDED, true).apply()
     }
 
+    // --- post-pairing setup checklist (the "Finish setting up" interstitial + Home nudge) ---
+
+    /// Whether the setup checklist has been shown once (by any exit: Done, "Not now", back).
+    /// Every post-pairing route to Home consults this, so the interstitial can never loop.
+    fun isSetupSeen(): Boolean = prefs.getBoolean(K_SETUP_SEEN, false)
+
+    fun setSetupSeen() {
+        prefs.edit().putBoolean(K_SETUP_SEEN, true).apply()
+    }
+
+    /// Whether the user pressed "Don't remind me" on the checklist reached from Home.
+    /// Once set, the quiet Home nudge row is gone for good on this device.
+    fun isSetupNudgeDismissed(): Boolean = prefs.getBoolean(K_SETUP_NUDGE_DISMISSED, false)
+
+    fun setSetupNudgeDismissed() {
+        prefs.edit().putBoolean(K_SETUP_NUDGE_DISMISSED, true).apply()
+    }
+
     /// Wipe everything on this device (identity — token + device key + the server's
     /// ping-signing pubkey — plus all credentials + onboarding). clear() drops every
     /// key in this store, so the server pubkey goes with it: no stale key survives a
@@ -146,6 +201,31 @@ class KeystoreSecretSource(context: Context) : SecretSource {
     /// fresh at the intro. Mirrors iOS's Keychain.resetAll().
     fun reset() {
         prefs.edit().clear().apply()
+    }
+
+    /// Sign out: unlink this phone from the Rindler account. Wipes local identity
+    /// (device token + key + server ping-signing pubkey), every saved login, the egress
+    /// token, and the account email/avatar — but KEEPS the onboarding flag so the next
+    /// launch lands on the Sign-in (Pair) screen, not the intro. The relay must be stopped
+    /// by the caller first (it holds a live reference).
+    ///
+    /// PHASE-0 HOOK — server-side device revoke: before wiping, a later phase POSTs the
+    /// current deviceToken() to the hub's revoke endpoint (/devices/revoke) so the server
+    /// invalidates the token too (defense in depth; today the local wipe is sufficient to
+    /// stop this device releasing anything). Capture deviceToken() ABOVE this call when
+    /// wiring it, since signOut() clears it. The 30-day-inactivity unlink lands on this
+    /// same code path when the relay reports the device revoked.
+    fun signOut() {
+        val onboarded = isOnboarded()
+        // Education state, NOT account state: someone who has already been through the
+        // intro and the setup checklist must not be re-taught them just because they
+        // signed back in. reset() ("Reset device") is the one path that wipes these.
+        val setupSeen = isSetupSeen()
+        val nudgeDismissed = isSetupNudgeDismissed()
+        prefs.edit().clear().apply()
+        if (onboarded) setOnboarded()
+        if (setupSeen) setSetupSeen()
+        if (nudgeDismissed) setSetupNudgeDismissed()
     }
 
     /// Called by the Go core per approved ping. Returns the site's credential JSON
@@ -221,3 +301,25 @@ data class EgressCredentials(
     val token: String,
     val gateway: String,
 )
+
+/**
+ * The truthful relay connection state AccountHeader shows on its status line (the
+ * Switch reflects the *requested* state instead — the switch must never lie).
+ *
+ * Baseline mapping today is enabled/paused only; OFFLINE_RETRYING and ACTION_NEEDED
+ * are wired in Phase C once the daemon surfaces socket liveness / errors.
+ */
+enum class ConnectionStatus { CONNECTED, CONNECTING, PAUSED, OFFLINE_RETRYING, ACTION_NEEDED }
+
+/**
+ * Derive the header status from the service enabled/paused state. While a toggle is in
+ * flight (requested ≠ actual) we show CONNECTING; else enabled → CONNECTED, disabled →
+ * PAUSED. Socket-liveness (OFFLINE_RETRYING) and error (ACTION_NEEDED) states are layered
+ * on in Phase C when the relay exposes them.
+ */
+fun deriveConnectionStatus(enabled: Boolean, toggleInFlight: Boolean): ConnectionStatus =
+    when {
+        toggleInFlight -> ConnectionStatus.CONNECTING
+        enabled -> ConnectionStatus.CONNECTED
+        else -> ConnectionStatus.PAUSED
+    }

@@ -5,26 +5,20 @@ import ai.rindler.autologin.KeystoreSecretSource
 import ai.rindler.autologin.SupportedSite
 import ai.rindler.autologin.fetchSupportedSites
 import ai.rindler.autologin.requestSiteMapping
+import ai.rindler.autologin.ui.theme.Dimens
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Check
-import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.Visibility
 import androidx.compose.material.icons.rounded.VisibilityOff
 import androidx.compose.material3.CircularProgressIndicator
@@ -102,166 +96,122 @@ fun EnrollScreen(store: KeystoreSecretSource, onDone: () -> Unit) {
     // the hub maps the site. Only a site + username are required.
     val saveEnabled = query.isNotEmpty() && username.isNotBlank()
 
-    Column(
-        Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 24.dp),
-    ) {
-        TopBar(title = "Add a login", onBack = onDone)
-        Spacer(Modifier.height(8.dp))
-        Text(
-            "Stored encrypted on this phone. When one of your sign-ins needs it, the credential is released automatically — end-to-end encrypted for that one login, only to a verified request.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = cs.onSurfaceVariant,
-        )
-        Spacer(Modifier.height(24.dp))
-        AppTextField(
-            site,
-            { site = it },
-            "Website",
-            supportingText = siteSupport,
-        )
+    AppScreen(title = "Add a login", onBack = onDone, footer = true) {
+        Column(Modifier.padding(horizontal = 16.dp)) {
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "Stored encrypted on this phone. When one of your sign-ins needs it, the credential is released automatically — end-to-end encrypted for that one login, only to a verified request.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = cs.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(24.dp))
+            AppTextField(
+                site,
+                { site = it },
+                "Website",
+                supportingText = siteSupport,
+            )
+        }
+        // Suggestions + mapping-request render in-flow inside THE one sanctioned box
+        // (§1.6): surfaceContainerLow, 16dp radius. In-flow push-down stays.
         AnimatedVisibility(showSuggestions) {
-            SuggestionList(matches) { picked -> site = picked }
+            SuggestionBox {
+                matches.forEachIndexed { i, item ->
+                    MediaRow(
+                        title = item.name,
+                        compact = true,
+                        leading = { SiteLogo(item.domain, size = 32) },
+                        supporting = item.domain.takeIf { !item.name.equals(it, ignoreCase = true) },
+                        onClick = { site = item.domain },
+                    )
+                    if (i != matches.lastIndex) InsetDivider(Dimens.keylineCompact)
+                }
+            }
         }
         AnimatedVisibility(showRequestMapping) {
-            RequestMappingRow(
-                domain = normalized,
-                requested = alreadyRequested,
-                requesting = requesting,
-                onRequest = {
-                    requesting = true
-                    scope.launch {
-                        val ok = requestSiteMapping(BuildConfig.CATALOG_URL, normalized)
-                        requesting = false
-                        if (ok) requestedFor = normalized
+            SuggestionBox {
+                MediaRow(
+                    title = if (alreadyRequested) "Requested — we'll add it soon" else "Request site mapping",
+                    compact = true,
+                    leading = {
+                        Box(
+                            Modifier.size(32.dp).clip(CircleShape).background(cs.primary.copy(alpha = 0.12f)),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            if (requesting) {
+                                CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = cs.primary)
+                            } else {
+                                Icon(
+                                    if (alreadyRequested) Icons.Rounded.Check else Icons.Rounded.Add,
+                                    contentDescription = null,
+                                    tint = cs.primary,
+                                    modifier = Modifier.size(18.dp),
+                                )
+                            }
+                        }
+                    },
+                    supporting = normalized,
+                    onClick = if (alreadyRequested || requesting) {
+                        null
+                    } else {
+                        {
+                            requesting = true
+                            scope.launch {
+                                val ok = requestSiteMapping(BuildConfig.CATALOG_URL, normalized)
+                                requesting = false
+                                if (ok) requestedFor = normalized
+                            }
+                        }
+                    },
+                )
+            }
+        }
+        Column(Modifier.padding(horizontal = 16.dp)) {
+            Spacer(Modifier.height(16.dp))
+            AppTextField(username, { username = it }, "Username or email")
+            Spacer(Modifier.height(16.dp))
+            AppTextField(
+                password, { password = it }, "Password",
+                visualTransformation = if (pwVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                trailingIcon = {
+                    IconButton(onClick = { pwVisible = !pwVisible }) {
+                        Icon(
+                            if (pwVisible) Icons.Rounded.VisibilityOff else Icons.Rounded.Visibility,
+                            contentDescription = if (pwVisible) "Hide password" else "Show password",
+                            tint = cs.onSurfaceVariant,
+                        )
                     }
                 },
             )
-        }
-        Spacer(Modifier.height(14.dp))
-        AppTextField(username, { username = it }, "Username or email")
-        Spacer(Modifier.height(14.dp))
-        AppTextField(
-            password, { password = it }, "Password",
-            visualTransformation = if (pwVisible) VisualTransformation.None else PasswordVisualTransformation(),
-            trailingIcon = {
-                IconButton(onClick = { pwVisible = !pwVisible }) {
-                    Icon(
-                        if (pwVisible) Icons.Rounded.VisibilityOff else Icons.Rounded.Visibility,
-                        contentDescription = if (pwVisible) "Hide password" else "Show password",
-                        tint = cs.onSurfaceVariant,
-                    )
-                }
-            },
-        )
-        Spacer(Modifier.height(28.dp))
-        PrimaryButton(
-            text = "Save to this device",
-            enabled = saveEnabled,
-            onClick = {
-                val json = JSONObject()
-                    .put("username", username.trim())
-                    .put("password", password)
-                    .toString()
-                store.enroll(matchedDomain ?: site.trim(), json)
-                onDone()
-            },
-        )
-        Spacer(Modifier.height(12.dp))
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            Icon(Icons.Rounded.Lock, null, tint = cs.onSurfaceVariant, modifier = Modifier.size(14.dp))
-            Text(
-                "Encrypted with this phone's secure hardware",
-                style = MaterialTheme.typography.labelMedium,
-                color = cs.onSurfaceVariant,
+            Spacer(Modifier.height(32.dp))
+            PrimaryButton(
+                text = "Save to this device",
+                enabled = saveEnabled,
+                onClick = {
+                    val json = JSONObject()
+                        .put("username", username.trim())
+                        .put("password", password)
+                        .toString()
+                    store.enroll(matchedDomain ?: site.trim(), json)
+                    onDone()
+                },
             )
         }
     }
 }
 
-/** Dropdown of supported-site matches beneath the Website field. Tapping a row sets
- *  the site to that exact supported domain. */
+/** The one sanctioned box (§1.6): the Enroll suggestions / mapping-request panel —
+ *  `surfaceContainerLow`, 16dp radius, inset 16dp from the screen margins. */
 @Composable
-private fun SuggestionList(items: List<SupportedSite>, onPick: (String) -> Unit) {
-    Spacer(Modifier.height(8.dp))
-    AppCard {
-        Column {
-            items.forEach { item ->
-                SuggestionRow(item) { onPick(item.domain) }
-            }
-        }
-    }
-}
-
-@Composable
-private fun SuggestionRow(item: SupportedSite, onPick: () -> Unit) {
-    val cs = MaterialTheme.colorScheme
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onPick)
-            .padding(horizontal = 14.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        SiteLogo(item.domain, size = 34)
-        Column(Modifier.weight(1f)) {
-            Text(item.name, style = MaterialTheme.typography.bodyLarge, color = cs.onSurface)
-            // Only show the domain line when it adds info beyond the display name.
-            if (!item.name.equals(item.domain, ignoreCase = true)) {
-                Text(item.domain, style = MaterialTheme.typography.labelMedium, color = cs.onSurfaceVariant)
-            }
-        }
-    }
-}
-
-/** Dropdown-styled row (same shape as a suggestion) offering to request a mapping
- *  for an unsupported site. Tapping pings the team's Slack; once requested it shows a
- *  confirmed state. */
-@Composable
-private fun RequestMappingRow(
-    domain: String,
-    requested: Boolean,
-    requesting: Boolean,
-    onRequest: () -> Unit,
-) {
-    val cs = MaterialTheme.colorScheme
-    Spacer(Modifier.height(8.dp))
-    AppCard {
-        Row(
+private fun SuggestionBox(content: @Composable () -> Unit) {
+    Column(Modifier.padding(horizontal = 16.dp)) {
+        Spacer(Modifier.height(8.dp))
+        Column(
             Modifier
                 .fillMaxWidth()
-                .clickable(enabled = !requested && !requesting, onClick = onRequest)
-                .padding(horizontal = 14.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            Box(
-                Modifier.size(34.dp).clip(CircleShape).background(cs.primary.copy(alpha = 0.12f)),
-                contentAlignment = Alignment.Center,
-            ) {
-                if (requesting) {
-                    CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = cs.primary)
-                } else {
-                    Icon(
-                        if (requested) Icons.Rounded.Check else Icons.Rounded.Add,
-                        contentDescription = null,
-                        tint = cs.primary,
-                        modifier = Modifier.size(18.dp),
-                    )
-                }
-            }
-            Column(Modifier.weight(1f)) {
-                Text(
-                    if (requested) "Requested — we'll add it soon" else "Request site mapping",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = cs.onSurface,
-                )
-                Text(domain, style = MaterialTheme.typography.labelMedium, color = cs.onSurfaceVariant)
-            }
-        }
+                .clip(MaterialTheme.shapes.medium)
+                .background(MaterialTheme.colorScheme.surfaceContainerLow),
+        ) { content() }
     }
 }
 
