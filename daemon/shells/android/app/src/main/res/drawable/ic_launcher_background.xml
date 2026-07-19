@@ -4,28 +4,17 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- "Check-Key" icon (#3958): deep ink navy so the mint mark reads premium and
-         stands apart from the sea of green/blue shield apps, while the mint ties
-         back to the Rindler emerald. -->
+    <!-- "Tap Ripple" icon: a near-black field so the off-white tap-to-unlock mark
+         reads premium and minimal, and stands apart from the sea of colored
+         shield/lock apps. -->
     <path android:pathData="M0,0 h108 v108 h-108 z">
         <aapt:attr name="android:fillColor">
             <gradient
                 android:type="linear"
                 android:startX="0" android:startY="0"
-                android:endX="108" android:endY="108"
-                android:startColor="#101C33"
-                android:endColor="#0A1222" />
-        </aapt:attr>
-    </path>
-    <!-- Soft top-left glow. -->
-    <path android:pathData="M0,0 h108 v108 h-108 z">
-        <aapt:attr name="android:fillColor">
-            <gradient
-                android:type="radial"
-                android:centerX="38" android:centerY="30"
-                android:gradientRadius="90"
-                android:startColor="#14FFFFFF"
-                android:endColor="#00FFFFFF" />
+                android:endX="0" android:endY="108"
+                android:startColor="#16171D"
+                android:endColor="#0A0B0E" />
         </aapt:attr>
     </path>
 </vector>

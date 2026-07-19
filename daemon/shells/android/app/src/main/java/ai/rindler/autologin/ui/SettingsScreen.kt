@@ -257,7 +257,7 @@ private fun SmsAutoReadSection(store: KeystoreSecretSource) {
             "Auto-Login needs permission to read verification texts. Flip the toggle on to allow it (or grant SMS " +
                 "access in Android Settings). Until then, you'll type 2FA codes in the app by hand."
         else ->
-            "Off — you'll type 2FA codes in the app when the hub asks. Turn on and Android asks once for " +
+            "Off — you'll type 2FA codes in the app when the server asks. Turn on and Android asks once for " +
                 "permission; after that Auto-Login reads a code only while a login is waiting for one, on this device."
     }
     Text(
@@ -366,7 +366,7 @@ private fun EgressSection(store: KeystoreSecretSource) {
             Spacer(Modifier.size(14.dp))
             Column(Modifier.weight(1f)) {
                 Text(
-                    "Use my device as the hub's connection",
+                    "Use my device as the server's connection",
                     style = MaterialTheme.typography.titleMedium,
                     color = cs.onSurface,
                 )
@@ -413,7 +413,7 @@ private fun EgressSection(store: KeystoreSecretSource) {
                 Text(
                     "When on, Auto-Login routes your AI agent's web traffic through this device and its " +
                         "internet connection. Sites you automate will see THIS device's IP address, not " +
-                        "the hub's. Many residential ISPs prohibit running a \"server,\" \"proxy,\" or " +
+                        "the server's. Many residential ISPs prohibit running a \"server,\" \"proxy,\" or " +
                         "\"commercial\" traffic on consumer plans (e.g. Comcast Xfinity, Verizon Fios, " +
                         "T-Mobile Home Internet), which can lead to service suspension. You are responsible " +
                         "for compliance with your ISP's terms. Only your own agent sessions use this " +
