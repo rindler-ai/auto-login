@@ -1,5 +1,6 @@
 package ai.rindler.autologin.ui
 
+import ai.rindler.autologin.BuildConfig
 import ai.rindler.autologin.KeystoreSecretSource
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Column
@@ -28,7 +29,16 @@ fun AdvancedScreen(
     onPaired: () -> Unit,
     onBack: () -> Unit,
 ) {
-    var hub by remember { mutableStateOf(store.hubUrl() ?: "") }
+    // Prefill ONLY a server the user configured themselves. After a normal branded
+    // sign-in the stored hub is the operator's own endpoint, and echoing it back into a
+    // visible text field discloses internal infrastructure to every user who taps
+    // Advanced — they neither chose it nor need it. A self-hoster's own address is still
+    // prefilled, because for them it is not a disclosure; everyone else gets the
+    // placeholder.
+    val configured = store.hubUrl()
+    var hub by remember {
+        mutableStateOf(if (configured != null && configured != BuildConfig.HUB_URL) configured else "")
+    }
     var code by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
