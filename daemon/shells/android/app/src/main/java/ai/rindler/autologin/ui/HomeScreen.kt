@@ -59,6 +59,7 @@ fun HomeScreen(
     // toggle and corrects the header when the relay comes up on its own (right after
     // pairing, or a START_STICKY restart).
     LaunchedEffect(running) { requested = running }
+    val header = headerState(running, requested)
     var sites by remember { mutableStateOf(store.sites()) }
     // Supported-site domains (lowercased) from the live catalog, so a saved login for
     // a site the hub hasn't mapped yet is badged with a warning. Empty until loaded /
@@ -97,9 +98,9 @@ fun HomeScreen(
             AccountHeader(
                 email = store.accountEmail(),
                 avatarUrl = store.avatarUrl(),
-                status = deriveConnectionStatus(running, toggleInFlight = requested != running),
-                serviceEnabled = requested,
-                toggleInFlight = requested != running,
+                status = header.status,
+                serviceEnabled = header.switchOn,
+                toggleInFlight = header.inFlight,
                 onToggle = {
                     requested = !requested
                     if (requested) RelayService.ensureRunning(ctx) else RelayService.stop(ctx)
