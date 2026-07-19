@@ -1,59 +1,25 @@
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp"
     android:height="108dp"
-    android:viewportWidth="512"
-    android:viewportHeight="512">
-    <!-- "Check-Key": a key whose shaft bends into a checkmark — key (your credential)
-         + check (signed in, automatically), one gesture. Mint-to-white stroke.
-         All ink sits in the 66% adaptive safe zone. (#3958) -->
-    <group android:translateX="2" android:translateY="14">
-        <!-- shaft + checkmark -->
-        <path
-            android:pathData="M148,268 L198,318 L293,225"
-            android:strokeWidth="40"
-            android:strokeLineCap="round"
-            android:strokeLineJoin="round">
-            <aapt:attr name="android:strokeColor">
-                <gradient android:type="linear"
-                    android:startX="150" android:startY="310"
-                    android:endX="360" android:endY="150"
-                    android:startColor="#FFFFFF" android:endColor="#5EEAD4" />
-            </aapt:attr>
-        </path>
-        <!-- two key teeth -->
-        <path
-            android:pathData="M238,279 L262,303"
-            android:strokeWidth="26"
-            android:strokeLineCap="round">
-            <aapt:attr name="android:strokeColor">
-                <gradient android:type="linear"
-                    android:startX="150" android:startY="310"
-                    android:endX="360" android:endY="150"
-                    android:startColor="#FFFFFF" android:endColor="#5EEAD4" />
-            </aapt:attr>
-        </path>
-        <path
-            android:pathData="M264,253 L288,277"
-            android:strokeWidth="26"
-            android:strokeLineCap="round">
-            <aapt:attr name="android:strokeColor">
-                <gradient android:type="linear"
-                    android:startX="150" android:startY="310"
-                    android:endX="360" android:endY="150"
-                    android:startColor="#FFFFFF" android:endColor="#5EEAD4" />
-            </aapt:attr>
-        </path>
-        <!-- bow ring -->
-        <path
-            android:pathData="M298,186 a34,34 0 1,0 68,0 a34,34 0 1,0 -68,0 Z"
-            android:strokeWidth="26">
-            <aapt:attr name="android:strokeColor">
-                <gradient android:type="linear"
-                    android:startX="150" android:startY="310"
-                    android:endX="360" android:endY="150"
-                    android:startColor="#FFFFFF" android:endColor="#5EEAD4" />
-            </aapt:attr>
-        </path>
-    </group>
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- "Tap Ripple": a fingertip point radiating two concentric ripples — one tap
+         and you're in. Off-white on near-black; the whole mark sits inside the 66%
+         adaptive safe zone (outer ripple reaches ~31.5 units from center). -->
+    <!-- outer ripple (faintest) -->
+    <path
+        android:pathData="M54,25 A29,29 0 1,1 54,83 A29,29 0 1,1 54,25"
+        android:strokeColor="#F5F5F7"
+        android:strokeWidth="5"
+        android:strokeAlpha="0.42" />
+    <!-- inner ripple -->
+    <path
+        android:pathData="M54,34 A20,20 0 1,1 54,74 A20,20 0 1,1 54,34"
+        android:strokeColor="#F5F5F7"
+        android:strokeWidth="6"
+        android:strokeAlpha="0.85" />
+    <!-- fingertip point -->
+    <path
+        android:pathData="M54,43 A11,11 0 1,1 54,65 A11,11 0 1,1 54,43 Z"
+        android:fillColor="#F5F5F7" />
 </vector>
