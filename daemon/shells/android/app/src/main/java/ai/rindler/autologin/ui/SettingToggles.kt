@@ -32,6 +32,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Battery5Bar
+import androidx.compose.material.icons.rounded.MailOutline
 import androidx.compose.material.icons.rounded.Notifications
 import androidx.compose.material.icons.rounded.Sms
 import androidx.compose.material.icons.rounded.SwapVert
@@ -120,6 +121,74 @@ fun SmsAutoReadToggle(store: KeystoreSecretSource) {
     SettingRow(
         leading = Icons.Rounded.Sms,
         title = "Read codes from SMS",
+        supporting = supporting,
+        trailing = RowTrailing.Switch(checked = active, onChange = { setEnabled(it) }),
+    )
+}
+
+/**
+ * The opt-in for automatic EMAIL code reading — the exact mirror of [SmsAutoReadToggle],
+ * where a LINKED MAILBOX is email's analog of the SMS permission. OFF by default. Auto-read
+ * is "active" only when the user opted in AND at least one mailbox is linked, so the switch
+ * never claims "On" while there is no inbox to read (a mailbox can be removed or break on the
+ * manage page behind our back — [store.isEmailLinked] is re-derived on ON_RESUME, never
+ * remembered).
+ *
+ * Turning it ON with no mailbox linked routes to the link flow ([onLinkMailbox]) instead of
+ * silently no-opping — the way the SMS toggle pops the permission prompt. Linking a mailbox
+ * itself flips the opt-in on ([KeystoreSecretSource.linkEmail]), so this toggle is the
+ * EXPLICIT control layered on top of that, not a replacement for it. Turning OFF disables
+ * auto-read (the reader gates on the same flag); the linked mailbox stays put, so flipping
+ * back on is instant. Renders one full-bleed [SettingRow]; the caller owns any header.
+ */
+@Composable
+fun EmailAutoReadToggle(store: KeystoreSecretSource, onLinkMailbox: () -> Unit) {
+    // optedIn is the persisted intent; linked is whether a mailbox exists on this device.
+    // "Active" needs BOTH — the same two-condition shape as SMS (opt-in + grant). Re-derived
+    // on resume so a mailbox added in the link flow, or removed / broken on the manage page,
+    // is reflected without the switch lying.
+    var optedIn by remember { mutableStateOf(store.isEmailAutoReadEnabled()) }
+    var linked by remember { mutableStateOf(store.isEmailLinked()) }
+    // Linking a mailbox flips the opt-in on and removing the last one flips it off, so BOTH
+    // are re-read together — coming back from the link flow must reflect the new state.
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+        optedIn = store.isEmailAutoReadEnabled()
+        linked = store.isEmailLinked()
+    }
+
+    val active = emailAutoReadActive(optedIn, linked)
+    val needsMailbox = optedIn && !linked
+
+    fun setEnabled(on: Boolean) {
+        if (!on) {
+            // Opt out: the reader goes inert immediately (it gates on this flag). The linked
+            // mailbox is left in place; flipping back on is instant, and removing a mailbox
+            // is a separate action on the manage page.
+            store.setEmailAutoReadEnabled(false)
+            optedIn = false
+            return
+        }
+        if (store.isEmailLinked()) {
+            store.setEmailAutoReadEnabled(true)
+            optedIn = true
+            linked = true
+        } else {
+            // Nothing to read yet. Turning this on with no mailbox would be a silent no-op,
+            // so route to the link flow — linkEmail() turns the opt-in on, and the ON_RESUME
+            // above reflects it when the user returns here.
+            onLinkMailbox()
+        }
+    }
+
+    val supporting = when {
+        active -> "Fills one-time codes automatically, only while a login is waiting"
+        needsMailbox -> "No mailbox linked — link one to read emailed codes again"
+        else -> "Lets Auto Login read a linked inbox for one-time codes — only while a sign-in is waiting for one"
+    }
+
+    SettingRow(
+        leading = Icons.Rounded.MailOutline,
+        title = "Read codes from email",
         supporting = supporting,
         trailing = RowTrailing.Switch(checked = active, onChange = { setEnabled(it) }),
     )

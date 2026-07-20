@@ -124,6 +124,10 @@ class KeystoreSecretSource(context: Context) : SecretSource {
         const val PREFS_FILE = "rindler_custody_secrets"
         const val ANDROID_KEYSTORE = "AndroidKeyStore"
 
+        // Reserved namespace for identity/settings/index keys. NO site key may live here;
+        // enroll()/lookup()/delete() refuse it so a site name can't alias an identity key.
+        const val META_PREFIX = "rindler-meta:"
+
         const val K_DEVICE_TOKEN = "rindler-meta:device-token"
         const val K_DEVICE_KEY = "rindler-meta:device-key" // base64 Ed25519 private key
 
@@ -156,6 +160,15 @@ class KeystoreSecretSource(context: Context) : SecretSource {
         const val K_SETUP_SEEN = "rindler-meta:setup-seen"
         const val K_SETUP_NUDGE_DISMISSED = "rindler-meta:setup-nudge-dismissed"
         const val K_HUB_URL = "rindler-meta:hub-url"        // the hub this device pairs + connects to
+
+        // Anti-fixation pairing nonce. openSignInEnroll mints a random 128-bit `state`,
+        // stores it here with the mint time, and appends it to the authorize URL; the server
+        // reflects it back into autologin://paired?…&state=<state>. A deep-link enrollment is
+        // accepted ONLY when its state equals this still-unexpired nonce (a drive-by page can
+        // never hold it). Single-use: consumed (cleared) on the first deep-link arrival,
+        // whatever the outcome. Not a durable secret — wiped wholesale by reset()/signOut().
+        const val K_ENROLL_STATE = "rindler-meta:enroll-state"
+        const val K_ENROLL_STATE_TS = "rindler-meta:enroll-state-ts" // mint time, epoch millis
 
         // Device-egress proxy opt-in + the durable egress token. When ON, the paired
         // device runs a tunnel egress so the user's OWN agent sessions exit through THIS
@@ -207,6 +220,32 @@ class KeystoreSecretSource(context: Context) : SecretSource {
     /// bearer-token call) at a server this device never paired with. Not a secret —
     /// just a hostname — but kept in the same store so "Reset device" clears it too.
     fun hubUrl(): String? = prefs.getString(K_HUB_URL, null)?.takeIf { it.isNotBlank() }
+
+    // --- anti-fixation pairing nonce (single-use `state` for the sign-in deep link) ---
+
+    /// The pending pairing nonce minted by the last openSignInEnroll, or null if none is
+    /// pending. Paired with [pendingEnrollStateTs] for the TTL check; the accept/reject
+    /// decision is the pure enrollStateAccepted().
+    fun pendingEnrollState(): String? = prefs.getString(K_ENROLL_STATE, null)?.takeIf { it.isNotBlank() }
+
+    /// When the pending nonce was minted (epoch millis), or 0 if none. 0 fails the TTL check
+    /// (fail-closed) since now - 0 exceeds any sane TTL.
+    fun pendingEnrollStateTs(): Long = prefs.getLong(K_ENROLL_STATE_TS, 0L)
+
+    /// Mint-store the pending nonce with the current time, in one commit. Overwrites any
+    /// previous pending nonce (only the most recent sign-in attempt can complete).
+    fun setPendingEnrollState(state: String) {
+        prefs.edit()
+            .putString(K_ENROLL_STATE, state)
+            .putLong(K_ENROLL_STATE_TS, System.currentTimeMillis())
+            .apply()
+    }
+
+    /// Clear the pending nonce (single-use consume). Called on EVERY deep-link arrival,
+    /// accept or reject, so a spent or rejected nonce can never be replayed.
+    fun consumePendingEnrollState() {
+        prefs.edit().remove(K_ENROLL_STATE).remove(K_ENROLL_STATE_TS).apply()
+    }
 
     // --- SMS auto-read opt-in (the user's choice; no OS permission is involved) ---
 
@@ -430,6 +469,9 @@ class KeystoreSecretSource(context: Context) : SecretSource {
     /// Called by the Go core per approved ping. Returns the site's credential JSON
     /// (the contract above) or "" if we hold nothing for it.
     override fun lookup(site: String): String {
+        // A ping's Site is never a reserved meta key; refuse it so a pong for
+        // "rindler-meta:device-token" can never read the device identity.
+        if (isReservedKey(site) || isReservedKey(normalizeSiteKey(site))) return ""
         // Credentials are stored as the ready-to-parse JSON string, keyed by the
         // NORMALIZED site (see SiteKey.kt). Try the ping's exact string first, then
         // its normalized form, so a ping phrased as "www.chase.com" still resolves
@@ -479,6 +521,11 @@ class KeystoreSecretSource(context: Context) : SecretSource {
     /// "chase.com"). The key is added to the index so HOME can list it.
     fun enroll(site: String, json: String) {
         val key = normalizeSiteKey(site).ifEmpty { site.trim() }
+        // Fence the reserved namespace: a site key must never alias an identity/meta key
+        // (they share this prefs file). A site literally named "rindler-meta:device-token"
+        // normalizes to itself, so without this guard its credential JSON would overwrite
+        // the device token / device key / server pubkey and brick the relay until re-pair.
+        if (isReservedKey(key)) return
         val updated = (sites() + key).distinct()
         prefs.edit()
             .putString(key, json)
@@ -486,9 +533,16 @@ class KeystoreSecretSource(context: Context) : SecretSource {
             .apply()
     }
 
+    // Keys under the reserved meta namespace (device identity, settings, indexes) are never
+    // valid site keys; reject them at the custody boundary so a typed or catalog-supplied
+    // site name can never read or overwrite one.
+    private fun isReservedKey(key: String): Boolean = key.startsWith(META_PREFIX)
+
     /// Remove a site's stored credential and drop it from the index. The plaintext
     /// is erased from the encrypted store; there is nothing left to relay for it.
     fun delete(site: String) {
+        // Never remove a reserved identity/meta key via the site-delete path.
+        if (isReservedKey(site)) return
         val updated = sites().filterNot { it == site }
         prefs.edit()
             .remove(site)

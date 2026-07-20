@@ -1,5 +1,6 @@
 package ai.rindler.autologin.ui
 
+import ai.rindler.autologin.KeystoreSecretSource
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -35,7 +36,7 @@ import androidx.compose.ui.unit.dp
 // use the discreet "Use a self-hosted server" link -> Advanced to pair against their own
 // server with a code. No pairing codes or server fields clutter this screen.
 @Composable
-fun PairScreen(onAdvanced: () -> Unit) {
+fun PairScreen(store: KeystoreSecretSource, onAdvanced: () -> Unit) {
     val ctx = LocalContext.current
     var failed by remember { mutableStateOf(false) }
     val cs = MaterialTheme.colorScheme
@@ -93,7 +94,7 @@ fun PairScreen(onAdvanced: () -> Unit) {
                     text = "Sign in",
                     onClick = {
                         failed = false
-                        if (!openSignInEnroll(ctx)) failed = true
+                        if (!openSignInEnroll(ctx, store)) failed = true
                     },
                     modifier = Modifier.padding(horizontal = 16.dp),
                 )

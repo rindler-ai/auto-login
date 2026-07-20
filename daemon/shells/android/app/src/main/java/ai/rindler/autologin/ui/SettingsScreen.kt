@@ -136,9 +136,13 @@ fun SettingsScreen(
             // No onClick → no ripple; it's context, not an action.
         )
 
-        // 3. Sign-in codes (SMS auto-read + linked mailboxes) — shared with the setup checklist.
+        // 3. Sign-in codes (SMS + email auto-read toggles + the mailbox manage row) — shared
+        //    with the setup checklist. The two toggles are the explicit on/off controls; the
+        //    manage row below is where mailboxes are added/removed. Turning email on with no
+        //    mailbox linked routes to that same manage page to link one.
         SectionHeader("SIGN-IN CODES")
         SmsAutoReadToggle(store)
+        EmailAutoReadToggle(store, onLinkMailbox = onManageEmails)
         val linkedEmails = store.linkedEmails()
         SettingRow(
             leading = Icons.Rounded.MailOutline,
@@ -215,7 +219,10 @@ fun SettingsScreen(
             text = {
                 Text(
                     signOutError
-                        ?: "This unlinks this phone from your Rindler account and erases all logins saved on this device.",
+                        ?: "Signing out resets Auto Login on this phone for security. It unlinks " +
+                            "your Rindler account and erases everything saved here — your saved " +
+                            "logins and any linked mailboxes. This can't be undone; you'd set the " +
+                            "phone up again from scratch.",
                     color = if (signOutError != null) cs.error else Color.Unspecified,
                 )
             },
