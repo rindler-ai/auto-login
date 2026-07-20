@@ -59,30 +59,65 @@ fun imapHostForDomain(email: String): String? {
  *  app-password page. Null when the provider is unknown (the generic help copy is shown). */
 data class ProviderHelp(val label: String, val url: String)
 
+/** One consumer email provider that offers IMAP + an app-password: the address [domains]
+ *  that map to it, and the [help] (label + the provider's OWN app-password page). */
+private data class EmailProvider(val domains: List<String>, val help: ProviderHelp)
+
 /**
- * The app-password help for an address's domain, or null when unknown. These are the
- * providers' OWN pages — no app-password is ever a "read-only" grant (Gmail/iCloud/Yahoo
- * app-passwords grant full mailbox access, send included), so the copy around this must
- * never claim otherwise.
+ * The SINGLE SOURCE OF TRUTH for app-password help: every provider label + URL is written
+ * exactly once here. Both the per-address lookup ([providerAppPasswordHelp]) and the full
+ * upfront list ([allProviderHelps]) read this one table, so the two can never drift.
+ *
+ * Order is stable and sensible — the most common consumer mailboxes first — because that is
+ * the order the link form surfaces them in. These are the providers' OWN pages; no
+ * app-password is ever a "read-only" grant (Gmail/iCloud/Yahoo app-passwords grant full
+ * mailbox access, send included), so copy around this must never claim otherwise.
+ */
+private val EMAIL_PROVIDERS: List<EmailProvider> = listOf(
+    EmailProvider(
+        listOf("gmail.com", "googlemail.com"),
+        ProviderHelp("Create a Google app password", "https://myaccount.google.com/apppasswords"),
+    ),
+    EmailProvider(
+        listOf("icloud.com", "me.com", "mac.com"),
+        ProviderHelp("Create an Apple app-specific password", "https://account.apple.com/account/manage"),
+    ),
+    EmailProvider(
+        listOf("yahoo.com", "ymail.com", "rocketmail.com"),
+        ProviderHelp("Create a Yahoo app password", "https://login.yahoo.com/account/security/app-passwords"),
+    ),
+    EmailProvider(
+        listOf("outlook.com", "hotmail.com", "live.com", "msn.com"),
+        ProviderHelp("Create an Outlook app password", "https://account.live.com/proofs/AppPassword"),
+    ),
+    EmailProvider(
+        listOf("aol.com"),
+        ProviderHelp("Create an AOL app password", "https://login.aol.com/account/security/app-passwords"),
+    ),
+    EmailProvider(
+        listOf("fastmail.com", "fastmail.fm"),
+        ProviderHelp("Create a Fastmail app password", "https://app.fastmail.com/settings/security/apppasswords"),
+    ),
+)
+
+/**
+ * The app-password help for an address's domain, or null when unknown (the generic help copy
+ * is shown). Reads the [EMAIL_PROVIDERS] table so it never diverges from [allProviderHelps].
  */
 fun providerAppPasswordHelp(email: String): ProviderHelp? {
     val domain = email.substringAfter("@", "").trim().lowercase()
-    return when (domain) {
-        "gmail.com", "googlemail.com" ->
-            ProviderHelp("Create a Google app password", "https://myaccount.google.com/apppasswords")
-        "icloud.com", "me.com", "mac.com" ->
-            ProviderHelp("Create an Apple app-specific password", "https://account.apple.com/account/manage")
-        "yahoo.com", "ymail.com", "rocketmail.com" ->
-            ProviderHelp("Create a Yahoo app password", "https://login.yahoo.com/account/security/app-passwords")
-        "outlook.com", "hotmail.com", "live.com", "msn.com" ->
-            ProviderHelp("Create an Outlook app password", "https://account.live.com/proofs/AppPassword")
-        "aol.com" ->
-            ProviderHelp("Create an AOL app password", "https://login.aol.com/account/security/app-passwords")
-        "fastmail.com", "fastmail.fm" ->
-            ProviderHelp("Create a Fastmail app password", "https://app.fastmail.com/settings/security/apppasswords")
-        else -> null
-    }
+    if (domain.isEmpty()) return null
+    return EMAIL_PROVIDERS.firstOrNull { domain in it.domains }?.help
 }
+
+/**
+ * Every provider's app-password help, in [EMAIL_PROVIDERS] order. This is what makes the
+ * option DISCOVERABLE: the link form can show all six upfront, before any address is typed,
+ * instead of only surfacing one once a recognised address is entered. By construction this
+ * is exactly the set [providerAppPasswordHelp] can ever return (same single table), so the
+ * upfront list and the per-address highlight can never disagree.
+ */
+fun allProviderHelps(): List<ProviderHelp> = EMAIL_PROVIDERS.map { it.help }
 
 /**
  * Order the linked mailboxes so the one whose address matches a saved login's [username]
