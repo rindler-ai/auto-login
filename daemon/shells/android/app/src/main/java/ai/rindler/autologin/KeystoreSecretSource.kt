@@ -124,6 +124,10 @@ class KeystoreSecretSource(context: Context) : SecretSource {
         const val PREFS_FILE = "rindler_custody_secrets"
         const val ANDROID_KEYSTORE = "AndroidKeyStore"
 
+        // Reserved namespace for identity/settings/index keys. NO site key may live here;
+        // enroll()/lookup()/delete() refuse it so a site name can't alias an identity key.
+        const val META_PREFIX = "rindler-meta:"
+
         const val K_DEVICE_TOKEN = "rindler-meta:device-token"
         const val K_DEVICE_KEY = "rindler-meta:device-key" // base64 Ed25519 private key
 
@@ -465,6 +469,9 @@ class KeystoreSecretSource(context: Context) : SecretSource {
     /// Called by the Go core per approved ping. Returns the site's credential JSON
     /// (the contract above) or "" if we hold nothing for it.
     override fun lookup(site: String): String {
+        // A ping's Site is never a reserved meta key; refuse it so a pong for
+        // "rindler-meta:device-token" can never read the device identity.
+        if (isReservedKey(site) || isReservedKey(normalizeSiteKey(site))) return ""
         // Credentials are stored as the ready-to-parse JSON string, keyed by the
         // NORMALIZED site (see SiteKey.kt). Try the ping's exact string first, then
         // its normalized form, so a ping phrased as "www.chase.com" still resolves
@@ -514,6 +521,11 @@ class KeystoreSecretSource(context: Context) : SecretSource {
     /// "chase.com"). The key is added to the index so HOME can list it.
     fun enroll(site: String, json: String) {
         val key = normalizeSiteKey(site).ifEmpty { site.trim() }
+        // Fence the reserved namespace: a site key must never alias an identity/meta key
+        // (they share this prefs file). A site literally named "rindler-meta:device-token"
+        // normalizes to itself, so without this guard its credential JSON would overwrite
+        // the device token / device key / server pubkey and brick the relay until re-pair.
+        if (isReservedKey(key)) return
         val updated = (sites() + key).distinct()
         prefs.edit()
             .putString(key, json)
@@ -521,9 +533,16 @@ class KeystoreSecretSource(context: Context) : SecretSource {
             .apply()
     }
 
+    // Keys under the reserved meta namespace (device identity, settings, indexes) are never
+    // valid site keys; reject them at the custody boundary so a typed or catalog-supplied
+    // site name can never read or overwrite one.
+    private fun isReservedKey(key: String): Boolean = key.startsWith(META_PREFIX)
+
     /// Remove a site's stored credential and drop it from the index. The plaintext
     /// is erased from the encrypted store; there is nothing left to relay for it.
     fun delete(site: String) {
+        // Never remove a reserved identity/meta key via the site-delete path.
+        if (isReservedKey(site)) return
         val updated = sites().filterNot { it == site }
         prefs.edit()
             .remove(site)

@@ -211,8 +211,13 @@ internal fun AutoLoginApp(
             nowMs = System.currentTimeMillis(),
             ttlMs = ENROLL_STATE_TTL_MS,
         )
-        store.consumePendingEnrollState()
         if (!nonceOk) {
+            // Do NOT consume the pending nonce on a rejected link. A drive-by
+            // autologin://paired?state=junk must not clear the nonce of a legitimate
+            // sign-in already in flight (that would be a griefing DoS: the real link
+            // arriving moments later would then find no pending nonce and be rejected).
+            // Anti-replay does not depend on consuming here: MainActivity clears the
+            // intent's data after parsing, and the server pairing token is single-use.
             onEnrollConsumed()
             linkingEmail = null
             enrollError =
@@ -221,6 +226,8 @@ internal fun AutoLoginApp(
             go(Dest.Completing)
             return@LaunchedEffect
         }
+        // Matched: consume the nonce now so this one accepted link is single-use.
+        store.consumePendingEnrollState()
         when (val gate = gateEnroll(
             linkHub = req.hub,
             storedHub = store.hubUrl(),
