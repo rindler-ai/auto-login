@@ -42,6 +42,12 @@ class RelayService : Service() {
         // when the device isn't paired (stopSelf) or Mobile.start throws. Setting this
         // unconditionally would make Home show "Active" while nothing is relaying.
         isRunning = session != null
+        // Expose the live session so the companion pollers can read its revoked() signal
+        // (mirrors liveEgress for egressTerminated()), then reconcile a server-side revoke
+        // now — so a revoke that landed while the app was closed still signs the device
+        // out on the next service start / BootReceiver relaunch.
+        liveSession = session
+        reconcileRevocation(applicationContext)
         // SMS auto-read needs nothing armed here: it is a manifest-declared SmsReceiver
         // that the OS delivers to (gated by the opt-in flag + RECEIVE_SMS). The relay only
         // needs to stay up so the process is alive to forward a code when a text arrives.
@@ -146,6 +152,7 @@ class RelayService : Service() {
     override fun onDestroy() {
         session?.stop()
         session = null
+        liveSession = null
         egress?.stop()
         egress = null
         liveEgress = null
@@ -175,6 +182,25 @@ class RelayService : Service() {
                 runningState.value = value
             }
 
+        /**
+         * Whether the relay signed the device out because the hub REVOKED it
+         * server-side (a web sign-out / the 30-day-inactivity unlink), as opposed to a
+         * transient network drop. Snapshot state (like [isRunning]) so the app, while
+         * foregrounded, reacts the moment it flips and returns to the Sign-in screen.
+         * reconcileRevocation sets it; the UI clears it (clearRevoked) after navigating.
+         */
+        private val revokedState = mutableStateOf(false)
+        var wasRevoked: Boolean
+            get() = revokedState.value
+            private set(value) {
+                revokedState.value = value
+            }
+
+        // The live relay session, so companion pollers can read its revoked() signal
+        // (mirrors liveEgress for egressTerminated()).
+        @Volatile
+        private var liveSession: Session? = null
+
         /** Whether the device-egress tunnel is live (drives the egress status). */
         @Volatile
         var isEgressActive: Boolean = false
@@ -193,6 +219,34 @@ class RelayService : Service() {
          *  revoked/rotated, or an app update required) and will not reconnect on its
          *  own. The UI uses this to drop a phantom "on" and prompt a re-enable. */
         fun egressTerminated(): Boolean = liveEgress?.terminated() ?: false
+
+        /**
+         * Auto sign-out on a server-side revoke. If the hub has REVOKED this device the
+         * Go core stops the relay with Session.revoked()=true (a transient drop leaves it
+         * false, so offline/airplane mode is a no-op here — the invariant). On a revoke:
+         * stop the relay, WIPE the on-device identity + saved logins (store.signOut()),
+         * stop the service, and raise [wasRevoked] so the UI returns to Sign-in.
+         *
+         * Idempotent and called only from the main thread (onStartCommand + the app's
+         * foreground poll / ON_RESUME), mirroring how egress termination is reconciled.
+         * Never logs the token. Returns nothing; the UI reacts to the [wasRevoked] flag.
+         */
+        fun reconcileRevocation(ctx: Context) {
+            val s = liveSession ?: return
+            if (!s.revoked()) return
+            // Claim the transition once: drop the reference first so a rapid re-entry
+            // (poll + ON_RESUME on the same frame) finds nothing left to do.
+            liveSession = null
+            s.stop() // signOut() requires the relay stopped first — it holds a live ref
+            KeystoreSecretSource(ctx.applicationContext).signOut()
+            stop(ctx) // tear the foreground service down; this device relays nothing now
+            wasRevoked = true
+        }
+
+        /** Clear the one-shot revoke flag once the UI has navigated to Sign-in. */
+        fun clearRevoked() {
+            wasRevoked = false
+        }
 
         /**
          * Start the relay if the device is paired AND holds the server's ping-signing

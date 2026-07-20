@@ -20,6 +20,7 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"sync/atomic"
 	"time"
 
 	"github.com/rindler-ai/auto-login/core/otp"
@@ -76,13 +77,31 @@ type CodeExpectationSink interface {
 }
 
 // Session is a running custody agent. Stop ends it and drops the hub connection.
-type Session struct{ cancel context.CancelFunc }
+// revoked records that Run stopped on a PERMANENT hub rejection (this device was
+// revoked/unlinked server-side) rather than a transient drop it keeps retrying.
+type Session struct {
+	cancel  context.CancelFunc
+	revoked atomic.Bool
+}
 
 // Stop tears the session down (idempotent).
 func (s *Session) Stop() {
 	if s != nil && s.cancel != nil {
 		s.cancel()
 	}
+}
+
+// Revoked reports whether the relay stopped because the hub PERMANENTLY rejected
+// this device — its row was revoked/unlinked server-side (a web sign-out, or the
+// 30-day-inactivity unlink), so the token is dead and retrying can never reconnect.
+// It mirrors EgressSession.Terminated(): the shell polls it and, when true, signs
+// the user out (wipes local identity, returns to the Sign-in screen).
+//
+// It is set ONLY on an actual hub hello-rejection. A network drop (offline, airplane
+// mode, a backgrounded radio) leaves the session retrying and Revoked() false, so
+// losing connectivity NEVER signs the user out. gomobile-safe (bool return, no args).
+func (s *Session) Revoked() bool {
+	return s != nil && s.revoked.Load()
 }
 
 // Start dials the hub and serves pings in the background until Stop.
@@ -128,8 +147,19 @@ func Start(hubURL, deviceToken, deviceKeyB64, serverPubkeyB64 string, src Secret
 		Log:          slog.New(slog.NewTextHandler(io.Discard, nil)),
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	go func() { _ = agent.Run(ctx, cfg) }()
-	return &Session{cancel: cancel}, nil
+	sess := &Session{cancel: cancel}
+	go func() {
+		// Run returns only when Stop cancels ctx OR the hub PERMANENTLY rejected this
+		// device's hello (revoked/unauthorized). Flag the revoke case so the shell can
+		// poll Revoked() and sign out; a Stop() cancel or any transient path leaves the
+		// flag false. IsPermanentAuthRejection is the airplane-mode-safe classifier —
+		// a dial/read error while offline is NOT a rejection, so it never flips this.
+		err := agent.Run(ctx, cfg)
+		if agent.IsPermanentAuthRejection(err) {
+			sess.revoked.Store(true)
+		}
+	}()
+	return sess, nil
 }
 
 // ExtractOTPCode pulls a single one-time login code out of an SMS / notification
