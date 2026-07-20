@@ -19,6 +19,7 @@ package ai.rindler.autologin.ui
 
 import ai.rindler.autologin.KeystoreSecretSource
 import ai.rindler.autologin.RelayService
+import ai.rindler.autologin.email.allProviderHelps
 import ai.rindler.autologin.email.imapHostForDomain
 import ai.rindler.autologin.email.isMailboxAuthError
 import ai.rindler.autologin.email.maskEmail
@@ -27,11 +28,15 @@ import ai.rindler.autologin.email.stripAppPasswordWhitespace
 import ai.rindler.mobile.Mobile
 import android.content.Intent
 import android.net.Uri
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.OpenInNew
@@ -53,6 +58,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
@@ -258,6 +264,7 @@ private fun EmailAddForm(
                 )
             }
             if (help != null) {
+                // The detected provider stays surfaced as the prominent one-tap affordance.
                 Spacer(Modifier.height(12.dp))
                 SecondaryButton(
                     text = help.label,
@@ -269,6 +276,38 @@ private fun EmailAddForm(
                     leading = {
                         Icon(Icons.AutoMirrored.Rounded.OpenInNew, null, tint = cs.onSurface, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.size(8.dp))
+                    },
+                )
+            }
+            // The full provider list, shown REGARDLESS of what is typed — so an empty form
+            // still tells the user the option exists (the bug: it only appeared once a
+            // recognised address was entered). The detected provider above is highlighted
+            // here too, tying the one-tap button to its place in the list.
+            Spacer(Modifier.height(24.dp))
+            Text(
+                "Where do I get an app password?",
+                style = MaterialTheme.typography.titleSmall,
+                color = cs.onSurface,
+            )
+            Spacer(Modifier.height(2.dp))
+            Text(
+                // Honest copy: an app-password is NOT a read-only grant. It gives full mailbox
+                // access; the safeguard is that it stays on this phone, not that it is limited.
+                "Make one in your email provider's security settings. It grants full mailbox " +
+                    "access, so keep it private — Auto Login uses it only on this phone to read " +
+                    "sign-in codes.",
+                style = MaterialTheme.typography.bodySmall,
+                color = cs.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(4.dp))
+            allProviderHelps().forEach { p ->
+                ProviderHelpLink(
+                    label = p.label,
+                    highlighted = help?.url == p.url,
+                    onClick = {
+                        runCatching {
+                            ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(p.url)))
+                        }
                     },
                 )
             }
@@ -321,5 +360,31 @@ private fun EmailAddForm(
             )
             Spacer(Modifier.height(8.dp))
         }
+    }
+}
+
+/** One compact tappable provider link in the "Where do I get an app password?" list: an
+ *  open-in-new glyph + the provider label, opening the provider's own page via ACTION_VIEW.
+ *  [highlighted] tints the entry that matches the typed address (the detected provider), so
+ *  the prominent one-tap button above and its row in the list read as the same thing. */
+@Composable
+private fun ProviderHelpLink(label: String, highlighted: Boolean, onClick: () -> Unit) {
+    val cs = MaterialTheme.colorScheme
+    val color = if (highlighted) cs.primary else cs.onSurface
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clickable(onClickLabel = label, onClick = onClick)
+            .padding(vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            Icons.AutoMirrored.Rounded.OpenInNew,
+            contentDescription = null,
+            tint = color,
+            modifier = Modifier.size(18.dp),
+        )
+        Spacer(Modifier.width(12.dp))
+        Text(label, style = MaterialTheme.typography.bodyMedium, color = color)
     }
 }
