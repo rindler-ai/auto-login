@@ -157,6 +157,15 @@ class KeystoreSecretSource(context: Context) : SecretSource {
         const val K_SETUP_NUDGE_DISMISSED = "rindler-meta:setup-nudge-dismissed"
         const val K_HUB_URL = "rindler-meta:hub-url"        // the hub this device pairs + connects to
 
+        // Anti-fixation pairing nonce. openSignInEnroll mints a random 128-bit `state`,
+        // stores it here with the mint time, and appends it to the authorize URL; the server
+        // reflects it back into autologin://paired?…&state=<state>. A deep-link enrollment is
+        // accepted ONLY when its state equals this still-unexpired nonce (a drive-by page can
+        // never hold it). Single-use: consumed (cleared) on the first deep-link arrival,
+        // whatever the outcome. Not a durable secret — wiped wholesale by reset()/signOut().
+        const val K_ENROLL_STATE = "rindler-meta:enroll-state"
+        const val K_ENROLL_STATE_TS = "rindler-meta:enroll-state-ts" // mint time, epoch millis
+
         // Device-egress proxy opt-in + the durable egress token. When ON, the paired
         // device runs a tunnel egress so the user's OWN agent sessions exit through THIS
         // device's IP. The token is a per-user tunnel token minted server-side; the
@@ -207,6 +216,32 @@ class KeystoreSecretSource(context: Context) : SecretSource {
     /// bearer-token call) at a server this device never paired with. Not a secret —
     /// just a hostname — but kept in the same store so "Reset device" clears it too.
     fun hubUrl(): String? = prefs.getString(K_HUB_URL, null)?.takeIf { it.isNotBlank() }
+
+    // --- anti-fixation pairing nonce (single-use `state` for the sign-in deep link) ---
+
+    /// The pending pairing nonce minted by the last openSignInEnroll, or null if none is
+    /// pending. Paired with [pendingEnrollStateTs] for the TTL check; the accept/reject
+    /// decision is the pure enrollStateAccepted().
+    fun pendingEnrollState(): String? = prefs.getString(K_ENROLL_STATE, null)?.takeIf { it.isNotBlank() }
+
+    /// When the pending nonce was minted (epoch millis), or 0 if none. 0 fails the TTL check
+    /// (fail-closed) since now - 0 exceeds any sane TTL.
+    fun pendingEnrollStateTs(): Long = prefs.getLong(K_ENROLL_STATE_TS, 0L)
+
+    /// Mint-store the pending nonce with the current time, in one commit. Overwrites any
+    /// previous pending nonce (only the most recent sign-in attempt can complete).
+    fun setPendingEnrollState(state: String) {
+        prefs.edit()
+            .putString(K_ENROLL_STATE, state)
+            .putLong(K_ENROLL_STATE_TS, System.currentTimeMillis())
+            .apply()
+    }
+
+    /// Clear the pending nonce (single-use consume). Called on EVERY deep-link arrival,
+    /// accept or reject, so a spent or rejected nonce can never be replayed.
+    fun consumePendingEnrollState() {
+        prefs.edit().remove(K_ENROLL_STATE).remove(K_ENROLL_STATE_TS).apply()
+    }
 
     // --- SMS auto-read opt-in (the user's choice; no OS permission is involved) ---
 

@@ -114,6 +114,13 @@ fun HomeScreen(
     fun smsAutoReadActive(): Boolean = store.isSmsAutoReadEnabled() && SmsAutoRead.hasPermission(ctx)
     var smsActive by remember { mutableStateOf(smsAutoReadActive()) }
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { smsActive = smsAutoReadActive() }
+    // Email auto-read is active only when opted in AND a mailbox is linked (email's analog of
+    // the SMS permission). Re-derived on resume, never remembered, for the same reason as SMS:
+    // a mailbox added in the link flow, or removed / broken on the manage page, must bring the
+    // manual-code row back rather than leave the user with no way to finish a sign-in.
+    fun emailAutoReadActiveNow(): Boolean = emailAutoReadActive(store.isEmailAutoReadEnabled(), store.isEmailLinked())
+    var emailActive by remember { mutableStateOf(emailAutoReadActiveNow()) }
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { emailActive = emailAutoReadActiveNow() }
     // Linked mailboxes — re-derived on resume so a mailbox that broke while the poll ran (or
     // was added/removed on the manage page) is reflected without a manual refresh. Drives the
     // conditional Home email row: ABSENT when nothing is linked, a live "reading from N"
@@ -197,10 +204,12 @@ fun HomeScreen(
             )
         }
 
-        // Type a code by hand — the reliability floor. Hidden while SMS auto-read is
-        // active, since codes fill themselves then and the row is just clutter; it
-        // reappears the moment auto-read is switched off or the permission goes away.
-        if (!smsActive) {
+        // Type a code by hand — the reliability floor. Hidden ONLY while BOTH SMS and email
+        // auto-read are active, since codes fill themselves then and the row is just clutter;
+        // it reappears the moment EITHER channel can't auto-read (a toggle switched off, an
+        // SMS permission revoked, or a mailbox unlinked/broken), so any code that can't fill
+        // itself still has a manual path.
+        if (manualCodeRowVisible(smsActive, emailActive)) {
             SettingRow(
                 leading = Icons.Rounded.Dialpad,
                 title = "Enter a login code",

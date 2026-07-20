@@ -52,6 +52,14 @@ import kotlinx.coroutines.launch
 internal enum class Dest { Onboarding, Pair, Completing, Setup, Home, Enroll, Settings, ManualCode, Advanced, LinkedEmails }
 
 /**
+ * A nonce-passed, gated deep-link enrollment awaiting the user's explicit confirmation tap.
+ * [firstPair] selects the copy + verb: a fresh-device first pair ("Link this phone?" / "Link
+ * phone") vs an already-linked re-link ("Link this phone again?" / "Replace link"). Holds the
+ * original [req] (for the token + account email) and the trusted [hub] gateEnroll resolved.
+ */
+private data class PendingConfirm(val req: EnrollRequest, val hub: String, val firstPair: Boolean)
+
+/**
  * Map a RESTORED destination to a safe landing screen (§4d). Every screen restores
  * unchanged so a rotation / process-death recreate keeps the user where they were —
  * EXCEPT [Dest.Completing], the uninterruptible in-flight pairing step. Its pairing
@@ -160,8 +168,11 @@ internal fun AutoLoginApp(
     // The account email the deep link carried, shown as "Linking as {email}…" on the
     // Completing screen before it is persisted (§3.3 / §4).
     var linkingEmail by remember { mutableStateOf<String?>(null) }
-    // A deep-link enrollment waiting on the "Link this phone again?" confirmation.
-    var pendingRelink by remember { mutableStateOf<Pair<EnrollRequest, String>?>(null) }
+    // A nonce-passed, gated deep-link enrollment awaiting the user's explicit confirmation
+    // tap. `firstPair` picks the copy: a fresh-device "Link this phone?" vs an already-linked
+    // "Link this phone again?" (which replaces the existing link). Even a nonce-valid pairing
+    // must be a deliberate tap — the confirmation is defense-in-depth over the nonce.
+    var pendingConfirm by remember { mutableStateOf<PendingConfirm?>(null) }
     val scope = rememberCoroutineScope()
 
     suspend fun runEnroll(req: EnrollRequest, hub: String) {
@@ -186,6 +197,30 @@ internal fun AutoLoginApp(
 
     LaunchedEffect(pendingEnroll) {
         val req = pendingEnroll ?: return@LaunchedEffect
+        // Anti-fixation nonce gate FIRST (§pairing). openSignInEnroll minted a single-use
+        // `state`, stored it with a timestamp, and required the server to reflect it back.
+        // Consume it now — single-use, whatever the outcome — and reject any link whose state
+        // does not match the still-unexpired stored nonce. A drive-by autologin://paired link
+        // never holds the nonce, so it is rejected here before gateEnroll ever runs. (The
+        // self-hosted Advanced path never routes through pendingEnroll — it calls
+        // completeEnroll directly — so manual, user-initiated pairing is unaffected.)
+        val nonceOk = enrollStateAccepted(
+            supplied = req.state,
+            stored = store.pendingEnrollState(),
+            storedTsMs = store.pendingEnrollStateTs(),
+            nowMs = System.currentTimeMillis(),
+            ttlMs = ENROLL_STATE_TTL_MS,
+        )
+        store.consumePendingEnrollState()
+        if (!nonceOk) {
+            onEnrollConsumed()
+            linkingEmail = null
+            enrollError =
+                "This link didn't come from a sign-in you started on this phone, so it was " +
+                    "ignored. Open Auto Login and tap Sign in to try again."
+            go(Dest.Completing)
+            return@LaunchedEffect
+        }
         when (val gate = gateEnroll(
             linkHub = req.hub,
             storedHub = store.hubUrl(),
@@ -199,37 +234,47 @@ internal fun AutoLoginApp(
                     "This sign-in link points to a different server, so this phone wasn't linked. Try signing in again."
                 go(Dest.Completing)
             }
-            is EnrollGate.ConfirmRelink -> pendingRelink = req to gate.hub
-            is EnrollGate.Proceed -> {
-                runEnroll(req, gate.hub)
-                onEnrollConsumed()
-            }
+            // Both gated outcomes require an explicit tap — no deep-link pairing is automatic.
+            is EnrollGate.ConfirmPair -> pendingConfirm = PendingConfirm(req, gate.hub, firstPair = true)
+            is EnrollGate.ConfirmRelink -> pendingConfirm = PendingConfirm(req, gate.hub, firstPair = false)
         }
     }
 
-    pendingRelink?.let { (relinkReq, relinkHub) ->
-        fun dismissRelink() {
-            pendingRelink = null
+    pendingConfirm?.let { confirm ->
+        fun dismissConfirm() {
+            pendingConfirm = null
             onEnrollConsumed()
         }
+        val acct = confirm.req.email
         AlertDialog(
-            onDismissRequest = { dismissRelink() },
+            onDismissRequest = { dismissConfirm() },
             shape = MaterialTheme.shapes.large,
-            title = { Text("Link this phone again?") },
+            title = { Text(if (confirm.firstPair) "Link this phone?" else "Link this phone again?") },
             text = {
                 Text(
-                    "This phone is already linked. Continuing replaces that link and connects it to " +
-                        "${hubHost(relinkHub)} instead. Only continue if you started this sign-in yourself.",
+                    if (confirm.firstPair) {
+                        buildString {
+                            append("This links this phone")
+                            if (acct != null) append(" to $acct")
+                            append(" and connects it to ${hubHost(confirm.hub)}. ")
+                            append("Only continue if you started this sign-in yourself.")
+                        }
+                    } else {
+                        "This phone is already linked. Continuing replaces that link and connects it to " +
+                            "${hubHost(confirm.hub)} instead. Only continue if you started this sign-in yourself."
+                    },
                 )
             },
             confirmButton = {
                 TextButton(onClick = {
-                    dismissRelink()
-                    scope.launch { runEnroll(relinkReq, relinkHub) }
-                }) { Text("Replace link") }
+                    val req = confirm.req
+                    val hub = confirm.hub
+                    dismissConfirm()
+                    scope.launch { runEnroll(req, hub) }
+                }) { Text(if (confirm.firstPair) "Link phone" else "Replace link") }
             },
             dismissButton = {
-                TextButton(onClick = { dismissRelink() }) { Text("Cancel") }
+                TextButton(onClick = { dismissConfirm() }) { Text("Cancel") }
             },
         )
     }
@@ -280,7 +325,7 @@ internal fun AutoLoginApp(
                     store.setOnboarded()
                     go(if (store.deviceToken() == null) Dest.Pair else Dest.Home)
                 })
-                Dest.Pair -> PairScreen(onAdvanced = { go(Dest.Advanced) })
+                Dest.Pair -> PairScreen(store = store, onAdvanced = { go(Dest.Advanced) })
                 Dest.Completing -> CompletingScreen(
                     error = enrollError,
                     email = linkingEmail,

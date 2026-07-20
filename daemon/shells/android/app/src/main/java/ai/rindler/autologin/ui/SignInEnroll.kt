@@ -34,9 +34,13 @@ data class EnrollRequest(
     val hub: String?,
     val email: String? = null,
     val avatar: String? = null,
+    // The anti-fixation nonce the server reflected back from the authorize URL. A link that
+    // omits it (a drive-by page that never had one) parses to null and is rejected by the
+    // nonce gate (enrollStateAccepted) before any pairing runs.
+    val state: String? = null,
 )
 
-/** Parse an `autologin://paired?token=…&hub=…&email=…&avatar=…` deep link, or null. */
+/** Parse an `autologin://paired?token=…&hub=…&email=…&avatar=…&state=…` deep link, or null. */
 fun parseEnrollUri(uri: Uri?): EnrollRequest? {
     if (uri == null) return null
     if (!uri.scheme.equals(ENROLL_SCHEME, ignoreCase = true)) return null
@@ -49,7 +53,49 @@ fun parseEnrollUri(uri: Uri?): EnrollRequest? {
         hub = uri.getQueryParameter("hub")?.takeIf { it.isNotBlank() },
         email = uri.getQueryParameter("email")?.takeIf { it.isNotBlank() },
         avatar = uri.getQueryParameter("avatar")?.takeIf { it.isNotBlank() },
+        state = uri.getQueryParameter("state")?.takeIf { it.isNotBlank() },
     )
+}
+
+/** How long a minted pairing nonce stays valid — a sign-in a user actually completes takes
+ *  well under this; a stale nonce past it is rejected (fail-closed). */
+const val ENROLL_STATE_TTL_MS: Long = 10 * 60 * 1000L
+
+/**
+ * The anti-fixation nonce check for a deep-link enrollment (pure; unit-tested in
+ * EnrollStateGateTest). openSignInEnroll mints a random 128-bit `state`, stores it with a
+ * timestamp, and requires the server to reflect it back in the deep link. A link is
+ * accepted ONLY when its state EXACTLY equals the stored, still-unexpired nonce:
+ *   - no pending nonce (stored null/blank)            -> reject (nothing was started here)
+ *   - the link carried no state (supplied null/blank) -> reject (a drive-by page)
+ *   - expired (now - mint time > [ttlMs])             -> reject
+ *   - mismatch                                        -> reject
+ * There is no partial credit — the hostile page never holds the 128-bit nonce, so a
+ * drive-by autologin://paired link can never satisfy this.
+ */
+internal fun enrollStateAccepted(
+    supplied: String?,
+    stored: String?,
+    storedTsMs: Long,
+    nowMs: Long,
+    ttlMs: Long,
+): Boolean {
+    if (stored.isNullOrBlank()) return false
+    if (supplied.isNullOrBlank()) return false
+    if (nowMs - storedTsMs > ttlMs) return false
+    return supplied == stored
+}
+
+/**
+ * A cryptographically-random 128-bit nonce (java.security.SecureRandom), lower-hex encoded
+ * (32 chars) so it is URL-safe as the `state` query parameter. 128 bits is unguessable.
+ */
+internal fun newEnrollState(): String {
+    val bytes = ByteArray(16)
+    java.security.SecureRandom().nextBytes(bytes)
+    // Mask to 0..255 before formatting — a negative Byte sign-extends to 8 hex digits and
+    // would break the fixed 32-char length otherwise.
+    return bytes.joinToString("") { "%02x".format(it.toInt() and 0xFF) }
 }
 
 /**
@@ -60,8 +106,12 @@ fun parseEnrollUri(uri: Uri?): EnrollRequest? {
  * auto-approved. See [gateEnroll] for the rules.
  */
 sealed interface EnrollGate {
-    /** Pair now, against [hub] (a trusted value, never the raw link parameter). */
-    data class Proceed(val hub: String) : EnrollGate
+    /**
+     * First pair on a fresh (unpaired) device: still require an explicit confirmation naming
+     * [hub] (and the account) before pairing. Defense-in-depth — the nonce is the real
+     * defense, but even a nonce-valid pairing must be a deliberate tap, never automatic.
+     */
+    data class ConfirmPair(val hub: String) : EnrollGate
 
     /** This phone is already linked: ask the user before replacing that link with [hub]. */
     data class ConfirmRelink(val hub: String) : EnrollGate
@@ -82,10 +132,10 @@ sealed interface EnrollGate {
  * names no hub falls back to the hub the USER already chose ([storedHub],
  * written only by successful pairings) or the build default.
  *
- * Re-link rule: a phone that already holds a device token never re-enrolls
- * silently — the caller must show an explicit confirmation naming the server
- * ([ConfirmRelink]) — otherwise a drive-by link with a freshly minted token
- * would quietly re-point an already-trusted device.
+ * Confirmation rule: NO deep-link pairing ever proceeds silently. An already-linked
+ * phone must confirm a re-link ([ConfirmRelink]); a fresh device must confirm the first
+ * pair ([ConfirmPair]). Both name the trusted hub. Combined with the nonce gate upstream,
+ * a drive-by link can neither hold the nonce nor skip the user's tap.
  */
 fun gateEnroll(
     linkHub: String?,
@@ -100,7 +150,7 @@ fun gateEnroll(
         linkHub.trim().equals(buildDefault.trim(), ignoreCase = true) -> buildDefault
         else -> return EnrollGate.RejectedHub
     }
-    return if (alreadyPaired) EnrollGate.ConfirmRelink(hub) else EnrollGate.Proceed(hub)
+    return if (alreadyPaired) EnrollGate.ConfirmRelink(hub) else EnrollGate.ConfirmPair(hub)
 }
 
 /** The bare host of a hub URL, for user-facing copy: "wss://x.example:8443/v1/…" -> "x.example". */
@@ -116,11 +166,18 @@ fun hubHost(hub: String): String =
 // disabled/broken default) so the caller can show a fallback instead of failing
 // silently. A browser that opens but can't reach the page ("site can't be reached")
 // is the browser's own error surface, not catchable here.
-fun openSignInEnroll(context: Context): Boolean {
+fun openSignInEnroll(context: Context, store: KeystoreSecretSource): Boolean {
+    // Mint a single-use anti-fixation nonce, store it (with a timestamp), and send it in the
+    // authorize URL. The server MUST reflect it back into autologin://paired?…&state=<state>;
+    // the deep-link handler rejects any link whose state does not match this pending nonce, so
+    // a drive-by autologin://paired link — which never had the nonce — cannot pair this phone.
+    val state = newEnrollState()
+    store.setPendingEnrollState(state)
     val url = Uri.parse(BuildConfig.AUTHORIZE_URL).buildUpon()
         .path("/devices/authorize")
         .appendQueryParameter("scheme", ENROLL_SCHEME)
         .appendQueryParameter("name", deviceName())
+        .appendQueryParameter("state", state)
         .build()
     return try {
         CustomTabsIntent.Builder().setShowTitle(true).build().launchUrl(context, url)

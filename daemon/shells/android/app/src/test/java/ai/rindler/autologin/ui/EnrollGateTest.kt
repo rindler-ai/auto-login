@@ -1,7 +1,6 @@
 package ai.rindler.autologin.ui
 
 import org.testng.Assert.assertEquals
-import org.testng.Assert.assertFalse
 import org.testng.Assert.assertTrue
 import org.testng.annotations.Test
 
@@ -20,7 +19,9 @@ import org.testng.annotations.Test
  * whole space in addition to per-cell representatives:
  *   1. the returned hub is ALWAYS a trusted value (the compiled-in default or the
  *      user's own stored hub), never the link's string;
- *   2. an already-paired device NEVER yields Proceed (silent re-enroll is forbidden).
+ *   2. NO deep-link pairing is ever silent — a valid link always yields a confirmation
+ *      (ConfirmPair on a fresh device, ConfirmRelink on an already-paired one), never an
+ *      automatic pair. (The nonce gate upstream is a separate defense, tested elsewhere.)
  */
 class EnrollGateTest {
     private val default = "wss://your-hub.example/v1/devices/connect"
@@ -36,11 +37,12 @@ class EnrollGateTest {
     private val storedHubs = listOf(null, selfHosted)
     private val pairedStates = listOf(false, true)
 
-    /** covers linkHub == buildDefault, unpaired — the normal hosted sign-in. */
+    /** covers linkHub == buildDefault, unpaired — the normal hosted sign-in: a fresh device
+     *  still CONFIRMS the first pair (defense-in-depth), it does not pair automatically. */
     @Test
-    fun matchingHubOnAFreshDeviceProceeds() {
+    fun matchingHubOnAFreshDeviceConfirmsFirstPair() {
         val gate = gateEnroll(default, null, default, alreadyPaired = false)
-        assertEquals(gate, EnrollGate.Proceed(default))
+        assertEquals(gate, EnrollGate.ConfirmPair(default))
     }
 
     /**
@@ -48,11 +50,11 @@ class EnrollGateTest {
      * pairing target is the CANONICAL compiled-in string, never the link's spelling.
      */
     @Test
-    fun caseAndWhitespaceVariantOfTheDefaultProceedsCanonically() {
+    fun caseAndWhitespaceVariantOfTheDefaultConfirmsCanonically() {
         val gate = gateEnroll(
             " WSS://YOUR-HUB.EXAMPLE/V1/DEVICES/CONNECT ", null, default, alreadyPaired = false,
         )
-        assertEquals(gate, EnrollGate.Proceed(default))
+        assertEquals(gate, EnrollGate.ConfirmPair(default))
     }
 
     /**
@@ -75,27 +77,28 @@ class EnrollGateTest {
         assertEquals(gate, EnrollGate.RejectedHub)
     }
 
-    /** covers linkHub == null — falls back to the user's own stored hub, then the default. */
+    /** covers linkHub == null — falls back to the user's own stored hub, then the default,
+     *  and confirms the first pair against whichever it resolved. */
     @Test
     fun aLinkNamingNoHubFallsBackToStoredThenDefault() {
         assertEquals(
             gateEnroll(null, selfHosted, default, alreadyPaired = false),
-            EnrollGate.Proceed(selfHosted),
+            EnrollGate.ConfirmPair(selfHosted),
         )
         assertEquals(
             gateEnroll(null, null, default, alreadyPaired = false),
-            EnrollGate.Proceed(default),
+            EnrollGate.ConfirmPair(default),
         )
     }
 
     /**
      * covers alreadyPaired = true with an acceptable hub: a device that already holds a
-     * token must get an explicit confirmation, not a silent re-enroll — a drive-by link
-     * with a freshly minted (attacker-owned) token on the REAL hub would otherwise
-     * quietly re-pair the phone into the attacker's account.
+     * token must get an explicit RE-LINK confirmation — a drive-by link with a freshly
+     * minted (attacker-owned) token on the REAL hub would otherwise quietly re-pair the
+     * phone into the attacker's account.
      */
     @Test
-    fun anAlreadyPairedDeviceRequiresConfirmation() {
+    fun anAlreadyPairedDeviceRequiresRelinkConfirmation() {
         assertEquals(
             gateEnroll(default, null, default, alreadyPaired = true),
             EnrollGate.ConfirmRelink(default),
@@ -117,7 +120,7 @@ class EnrollGateTest {
         for (linkHub in linkHubs) for (storedHub in storedHubs) for (paired in pairedStates) {
             val gate = gateEnroll(linkHub, storedHub, default, paired)
             val hub = when (gate) {
-                is EnrollGate.Proceed -> gate.hub
+                is EnrollGate.ConfirmPair -> gate.hub
                 is EnrollGate.ConfirmRelink -> gate.hub
                 is EnrollGate.RejectedHub -> continue
             }
@@ -128,14 +131,22 @@ class EnrollGateTest {
         }
     }
 
-    /** Property 2 across the whole space: a paired device never silently proceeds. */
+    /**
+     * Property 2 across the whole space: NO input ever yields a silent, automatic pair —
+     * every non-rejected outcome is a confirmation the user must tap (ConfirmPair or
+     * ConfirmRelink). This is the assertion that fails if a future change re-introduces an
+     * auto-proceed path (the old EnrollGate.Proceed).
+     */
     @Test
-    fun aPairedDeviceNeverSilentlyReEnrolls() {
-        for (linkHub in linkHubs) for (storedHub in storedHubs) {
-            val gate = gateEnroll(linkHub, storedHub, default, alreadyPaired = true)
-            assertFalse(
-                gate is EnrollGate.Proceed,
-                "already-paired device must confirm or reject, got $gate (link=$linkHub stored=$storedHub)",
+    fun noDeepLinkPairingIsEverSilent() {
+        for (linkHub in linkHubs) for (storedHub in storedHubs) for (paired in pairedStates) {
+            val gate = gateEnroll(linkHub, storedHub, default, paired)
+            assertTrue(
+                gate is EnrollGate.ConfirmPair ||
+                    gate is EnrollGate.ConfirmRelink ||
+                    gate is EnrollGate.RejectedHub,
+                "a deep-link gate must confirm or reject, never pair silently: got $gate " +
+                    "(link=$linkHub stored=$storedHub paired=$paired)",
             )
         }
     }
