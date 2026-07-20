@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/ed25519"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/url"
@@ -134,6 +135,17 @@ func Run(ctx context.Context, cfg Config) error {
 		err := runOnce(ctx, cfg, log, guard)
 		if ctx.Err() != nil {
 			return ctx.Err()
+		}
+		// A PERMANENT auth rejection (the hub answered the handshake but refused this
+		// device — its token was revoked/unlinked/unauthorized) will never succeed by
+		// retrying, so STOP the loop and return the error. The shell polls
+		// Session.Revoked() (via IsPermanentAuthRejection) and signs the user out. A
+		// transient dial/read error (offline, airplane mode, a backgrounded radio) is
+		// NOT this: it falls through to backoff-and-retry, so losing the network never
+		// signs anyone out. This split is the whole revoke-vs-offline invariant.
+		if isPermanentAuthRejection(err) {
+			log.Warn("custody: hub rejected this device — token revoked/unauthorized; stopping relay (re-pair to reconnect)")
+			return err
 		}
 		log.Warn("custody: hub connection closed, reconnecting", "err", err, "backoff", backoff)
 		select {
@@ -371,4 +383,25 @@ func (e *helloError) Error() string {
 		return "custody: hub rejected hello"
 	}
 	return "custody: hub rejected hello: " + e.msg
+}
+
+// isPermanentAuthRejection classifies a runOnce error. It is TRUE only for a
+// *helloError — the hub completed the handshake but refused this device (its token
+// was revoked/unlinked/unauthorized), so retrying the SAME token can never succeed
+// and the relay must stop. It is FALSE for everything else: a dial failure, a read
+// error, a dropped socket, a cancelled context — all TRANSIENT (offline / airplane
+// mode / a parked radio), which MUST keep retrying. This one predicate carries the
+// entire airplane-mode-safety invariant: only an actual hub rejection is permanent,
+// never a network blip. errors.As (not a bare type assertion) so a wrapped dial
+// error correctly reports false.
+func isPermanentAuthRejection(err error) bool {
+	var he *helloError
+	return errors.As(err, &he)
+}
+
+// IsPermanentAuthRejection is the exported boundary the mobile shell uses to tell a
+// real server-side revoke (→ sign the user out) apart from being offline (→ keep the
+// session, keep retrying). It delegates to the pure decision above.
+func IsPermanentAuthRejection(err error) bool {
+	return isPermanentAuthRejection(err)
 }
