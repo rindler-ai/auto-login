@@ -16,7 +16,10 @@ android {
         // is running it, so the number tracks "not shipped yet" rather than counting
         // up through fixes. versionCode still increments — the release gate requires
         // it to be strictly monotonic, and 17 was the email-OTP-linking predecessor.
-        versionCode = 23
+        // 23 -> 24: re-cut of v0.1.0 with host-neutral endpoints — AUTHORIZE_URL and
+        // PRIVACY_POLICY_URL moved off hub.example to api.example / rindler.ai
+        // (CATALOG_URL/HUB_URL were already mcp), matching the server routes now on mcp.
+        versionCode = 24
         versionName = "0.1.0"
 
         // Backend URLs are build params. The DEFAULTS here are PROD (a plain
