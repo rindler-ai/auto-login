@@ -15,7 +15,7 @@
 // `throws` — see the call sites below for the bridging pattern):
 //   MobileGenerateDeviceKey()      -> base64 Ed25519 private key   (store in Keychain)
 //   MobileDevicePublicKey(keyB64)  -> base64 public half           (sent when pairing)
-//   MobilePair(pairURL, code, name, platform, pubB64) -> MobilePairResult
+//   MobilePair(pairURL, code, name, platform, pubB64, androidID) -> MobilePairResult
 //        .deviceToken   long-lived hub bearer token  (store in Keychain)
 //        .serverPubkey  the server's Ed25519 ping-signing PUBLIC key (store too!)
 //
@@ -139,7 +139,12 @@ struct PairingView: View {
                 if let err { throw err }
                 let pubB64 = MobileDevicePublicKey(keyB64, &err)
                 if let err { throw err }
-                let result = MobilePair(pairURL, submittedCode, name, plat, pubB64, &err)
+                // TODO(#4564): send the durable device fingerprint seed here in the same
+                // android_id field — on iOS/macOS this should be
+                // UIDevice.current.identifierForVendor?.uuidString (iOS) or an
+                // equivalent stable per-vendor id, read fresh at pair and never
+                // persisted. "" degrades the server to pubkey-only dedup for now.
+                let result = MobilePair(pairURL, submittedCode, name, plat, pubB64, "", &err)
                 if let err { throw err }
                 guard let result else { throw pairFailed }
 

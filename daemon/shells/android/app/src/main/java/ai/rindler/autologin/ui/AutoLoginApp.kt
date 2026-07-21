@@ -180,7 +180,7 @@ internal fun AutoLoginApp(
         linkingEmail = req.email
         if (!store.isOnboarded()) store.setOnboarded()
         go(Dest.Completing)
-        val result = completeEnroll(store, req.token, hub)
+        val result = completeEnroll(ctx, store, req.token, hub)
         result.fold(
             onSuccess = {
                 // Persist the account identity ONCE at sign-in (never re-fetched per

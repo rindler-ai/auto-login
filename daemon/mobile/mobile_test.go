@@ -299,7 +299,7 @@ func TestPair_ReturnsTokenAndServerPubkey(t *testing.T) {
 		})
 	}))
 	defer srv.Close()
-	res, err := Pair(srv.URL, code, "iPhone", "ios", pub)
+	res, err := Pair(srv.URL, code, "iPhone", "ios", pub, "os-device-id")
 	if err != nil {
 		t.Fatalf("Pair: %v", err)
 	}

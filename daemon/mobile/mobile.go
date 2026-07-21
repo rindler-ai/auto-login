@@ -331,12 +331,18 @@ type PairResult struct {
 // the long-lived device token PLUS the server's ping-signing public key. Only the
 // device's PUBLIC key is sent. pairURL is the server's /devices/pair/complete
 // endpoint.
-func Pair(pairURL, pairingCode, deviceName, platform, devicePubkeyB64 string) (*PairResult, error) {
+//
+// androidID is the RAW stable OS device id (Android Settings.Secure.ANDROID_ID) read
+// fresh from the OS at pair time — the durable identity the server salts+hashes to
+// dedup a re-pair (reinstall/sign-out) to ONE record. The native shell reads it fresh
+// each pairing and NEVER persists it (sign-out/reset wipes app storage, so a stored
+// value could not survive; only an OS-provided id does). Pass "" if none.
+func Pair(pairURL, pairingCode, deviceName, platform, devicePubkeyB64, androidID string) (*PairResult, error) {
 	pub, err := base64.StdEncoding.DecodeString(devicePubkeyB64)
 	if err != nil {
 		return nil, errors.New("mobile: device pubkey not base64")
 	}
-	res, err := agent.CompletePairing(context.Background(), pairURL, pairingCode, deviceName, platform, ed25519.PublicKey(pub))
+	res, err := agent.CompletePairing(context.Background(), pairURL, pairingCode, deviceName, platform, androidID, ed25519.PublicKey(pub))
 	if err != nil {
 		return nil, err
 	}

@@ -97,7 +97,11 @@ func pairAndPersist(ctx context.Context, kr keyringBackend, hubURL, code string,
 		}
 	}
 	log.Info("custody: pairing this device", "pair_url", pairURL, "name", name, "platform", runtime.GOOS)
-	res, err := agent.CompletePairing(ctx, pairURL, code, name, runtime.GOOS, pub)
+	// The headless desktop daemon has no OS-provided stable device id analogous to
+	// Android's ANDROID_ID, so it sends "" and the server degrades to pubkey-only
+	// dedup — fine here, since the desktop key persists in the OS keychain across
+	// restarts (it does not rotate the way the mobile Keystore key does).
+	res, err := agent.CompletePairing(ctx, pairURL, code, name, runtime.GOOS, "", pub)
 	if err != nil {
 		return identity{}, err
 	}

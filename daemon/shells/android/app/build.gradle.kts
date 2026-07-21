@@ -16,10 +16,14 @@ android {
         // is running it, so the number tracks "not shipped yet" rather than counting
         // up through fixes. versionCode still increments — the release gate requires
         // it to be strictly monotonic, and 17 was the email-OTP-linking predecessor.
-        // 23 -> 24: re-cut of v0.1.0 with host-neutral endpoints — AUTHORIZE_URL and
-        // PRIVACY_POLICY_URL moved off hub.example to api.example / rindler.ai
-        // (CATALOG_URL/HUB_URL were already mcp), matching the server routes now on mcp.
-        versionCode = 24
+        // 23 -> 24: re-cut of v0.1.0 with host-neutral endpoints. AUTHORIZE_URL and
+        // PRIVACY_POLICY_URL were realigned to the product's API host / apex domain
+        // (CATALOG_URL/HUB_URL already matched), tracking the current server routes.
+        // Real hosts are never committed here; they are injected at build time from
+        // repo Variables (the hostname-guard + gitleaks block a committed host).
+        // 24 -> 25: re-cut of v0.1.0 sending the device fingerprint (ANDROID_ID) at pair
+        // so the server dedups a re-pair (reinstall/sign-out) to one device row (#4564).
+        versionCode = 25
         versionName = "0.1.0"
 
         // Backend URLs are build params. The DEFAULTS here are PROD (a plain

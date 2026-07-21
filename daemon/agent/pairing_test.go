@@ -61,7 +61,7 @@ func TestCompletePairing_HappyPath(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	res, err := CompletePairing(context.Background(), srv.URL+"/devices/pair/complete", code, "Example Mac", "darwin", pub)
+	res, err := CompletePairing(context.Background(), srv.URL+"/devices/pair/complete", code, "Example Mac", "darwin", "android-id-xyz", pub)
 	if err != nil {
 		t.Fatalf("CompletePairing: %v", err)
 	}
@@ -79,6 +79,11 @@ func TestCompletePairing_HappyPath(t *testing.T) {
 	if gotBody["pairing_token"] != code || gotBody["platform"] != "darwin" || gotBody["device_name"] != "Example Mac" {
 		t.Fatalf("unexpected body: %+v", gotBody)
 	}
+	// The RAW OS device id (Android ANDROID_ID) is sent as android_id — the durable
+	// re-pair dedup seed the server salts+hashes.
+	if gotBody["android_id"] != "android-id-xyz" {
+		t.Fatalf("android_id not sent in pair body: %q", gotBody["android_id"])
+	}
 }
 
 // A server_pubkey that is present but unusable is a server bug or tampering, not
@@ -91,7 +96,7 @@ func TestCompletePairing_RejectsMalformedServerPubkey(t *testing.T) {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			_ = json.NewEncoder(w).Encode(map[string]string{"device_token": "cd_dev_x", "server_pubkey": bad})
 		}))
-		if _, err := CompletePairing(context.Background(), srv.URL, code, "n", "linux", pub); err == nil {
+		if _, err := CompletePairing(context.Background(), srv.URL, code, "n", "linux", "", pub); err == nil {
 			t.Fatalf("expected an error on malformed server_pubkey %q", bad)
 		}
 		srv.Close()
@@ -116,7 +121,7 @@ func TestCompletePairing_RejectsInjectedServerKey(t *testing.T) {
 	srv := pairServer(base64.StdEncoding.EncodeToString(attackerPub))
 	defer srv.Close()
 
-	res, err := CompletePairing(context.Background(), srv.URL, code, "dev", "linux", pub)
+	res, err := CompletePairing(context.Background(), srv.URL, code, "dev", "linux", "", pub)
 	if err == nil {
 		t.Fatalf("device accepted an injected server key: %+v", res)
 	}
@@ -166,7 +171,7 @@ func TestCompletePairing_TOFU(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			srv := pairServer(tc.serverPub)
 			defer srv.Close()
-			res, err := CompletePairing(context.Background(), srv.URL, tc.code, "dev", "linux", pub)
+			res, err := CompletePairing(context.Background(), srv.URL, tc.code, "dev", "linux", "", pub)
 			if tc.wantErr != "" {
 				if err == nil {
 					t.Fatalf("want error containing %q, got nil (res=%+v)", tc.wantErr, res)
@@ -218,7 +223,7 @@ func TestCompletePairing_RejectsBadStatus(t *testing.T) {
 		w.WriteHeader(http.StatusUnauthorized)
 	}))
 	defer srv.Close()
-	if _, err := CompletePairing(context.Background(), srv.URL, code, "n", "linux", pub); err == nil {
+	if _, err := CompletePairing(context.Background(), srv.URL, code, "n", "linux", "", pub); err == nil {
 		t.Fatal("expected error on 401")
 	}
 }
@@ -226,19 +231,19 @@ func TestCompletePairing_RejectsBadStatus(t *testing.T) {
 func TestCompletePairing_ValidatesInputs(t *testing.T) {
 	good, _, _ := ed25519.GenerateKey(nil)
 	// Empty and non-v2 codes are rejected before any network call.
-	if _, err := CompletePairing(context.Background(), "http://x", "", "n", "linux", good); err == nil {
+	if _, err := CompletePairing(context.Background(), "http://x", "", "n", "linux", "", good); err == nil {
 		t.Fatal("expected error on empty pairing code")
 	}
-	if _, err := CompletePairing(context.Background(), "http://x", "cd_pair_v1code", "n", "linux", good); err == nil {
+	if _, err := CompletePairing(context.Background(), "http://x", "cd_pair_v1code", "n", "linux", "", good); err == nil {
 		t.Fatal("expected error on a v1 pairing code")
 	}
 	// A v2-prefixed code whose body is not 32 hex-decoded bytes is rejected too.
-	if _, err := CompletePairing(context.Background(), "http://x", "cd_pair2_zzzz", "n", "linux", good); err == nil {
+	if _, err := CompletePairing(context.Background(), "http://x", "cd_pair2_zzzz", "n", "linux", "", good); err == nil {
 		t.Fatal("expected error on a malformed v2 code body")
 	}
 	// A well-formed v2 code but a wrong-size device pubkey.
 	code := mintPairV2Code(t, relay.PairingFingerprint(nil))
-	if _, err := CompletePairing(context.Background(), "http://x", code, "n", "linux", []byte("short")); err == nil {
+	if _, err := CompletePairing(context.Background(), "http://x", code, "n", "linux", "", []byte("short")); err == nil {
 		t.Fatal("expected error on wrong-size pubkey")
 	}
 }
@@ -275,7 +280,7 @@ func TestCompletePairing_NeverSendsPrivateKey(t *testing.T) {
 		_ = json.NewEncoder(w).Encode(map[string]string{"device_token": "cd_dev_x"})
 	}))
 	defer srv.Close()
-	if _, err := CompletePairing(context.Background(), srv.URL, code, "n", "linux", pub); err != nil {
+	if _, err := CompletePairing(context.Background(), srv.URL, code, "n", "linux", "", pub); err != nil {
 		t.Fatal(err)
 	}
 	if strings.Contains(raw, privB64) {

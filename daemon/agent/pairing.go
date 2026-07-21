@@ -42,7 +42,7 @@ type PairResult struct {
 //
 // Request/response contract is the server's devicereg.PairComplete:
 //
-//	POST {"pairing_token","device_name","platform","device_pubkey"(base64)}
+//	POST {"pairing_token","device_name","platform","device_pubkey"(base64),"android_id"}
 //	  -> {"device_id","device_token","server_pubkey"(base64)}
 //
 // Pairing-channel TOFU (follow-up). The v2 pairing code carries, in its
@@ -58,7 +58,14 @@ type PairResult struct {
 // is therefore accepted only when the code committed to the keyless-lane
 // fingerprint; on a keyed lane a stripped response computes the keyless
 // fingerprint, which does not match the embedded real one, so it is rejected.
-func CompletePairing(ctx context.Context, pairURL, pairingToken, deviceName, platform string, pub ed25519.PublicKey) (PairResult, error) {
+//
+// androidID is the RAW stable OS device id (Android Settings.Secure.ANDROID_ID),
+// read fresh from the OS at pair time — the durable identity the server salts+hashes
+// into custody_devices.device_fingerprint to dedup a re-pair (uninstall/reinstall +
+// sign-out) to ONE record. It is sent in the "android_id" body field. Pass "" on a
+// platform that has none (the desktop daemon); the server then degrades to pubkey-only
+// dedup. It is NEVER persisted on the device — read fresh each pairing.
+func CompletePairing(ctx context.Context, pairURL, pairingToken, deviceName, platform, androidID string, pub ed25519.PublicKey) (PairResult, error) {
 	// (a) The code MUST be a v2 (TOFU) code. This rejects a v1 "cd_pair_" code and
 	// any downgrade. The generic message deliberately reveals no internals.
 	if !strings.HasPrefix(pairingToken, pairV2Prefix) {
@@ -81,6 +88,9 @@ func CompletePairing(ctx context.Context, pairURL, pairingToken, deviceName, pla
 		"device_name":   deviceName,
 		"platform":      platform,
 		"device_pubkey": base64.StdEncoding.EncodeToString(pub),
+		// Durable device fingerprint seed. Empty on a platform with none; the
+		// server treats "" as "no fingerprint" and degrades to pubkey-only dedup.
+		"android_id": androidID,
 	})
 
 	// (d) Redeem the code at the server.

@@ -13,9 +13,11 @@ package ai.rindler.autologin.ui
 import ai.rindler.autologin.BuildConfig
 import ai.rindler.autologin.KeystoreSecretSource
 import ai.rindler.mobile.Mobile
+import android.annotation.SuppressLint
 import android.content.Context
 import android.net.Uri
 import android.os.Build
+import android.provider.Settings
 import androidx.browser.customtabs.CustomTabsIntent
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -199,8 +201,14 @@ fun openSignInEnroll(context: Context, store: KeystoreSecretSource): Boolean {
  * hostile or broken pairing attempt must never leave the app pointed at a server
  * it did not successfully pair with (every later authed call — submitOtpCode,
  * egress mint/disable — would carry the real device bearer token there).
+ *
+ * It also sends [androidId] — the OS-provided stable device id, read FRESH here — as
+ * the durable fingerprint seed so the server dedups a re-pair (uninstall/reinstall +
+ * sign-out) to ONE record. The Ed25519 key still rotates every enroll (the Keystore
+ * wipes it on uninstall/sign-out); ANDROID_ID does not, so it is the identity that
+ * survives. It is read fresh and never persisted in app storage.
  */
-suspend fun completeEnroll(store: KeystoreSecretSource, token: String, hub: String): Result<Unit> =
+suspend fun completeEnroll(context: Context, store: KeystoreSecretSource, token: String, hub: String): Result<Unit> =
     withContext(Dispatchers.IO) {
         runCatching {
             val keyB64 = Mobile.generateDeviceKey()
@@ -210,11 +218,25 @@ suspend fun completeEnroll(store: KeystoreSecretSource, token: String, hub: Stri
             // that key before sealing a credential to the worker, so a device that
             // saved only the token declines every login.
             val res = Mobile.pair(
-                pairUrl(hub), token, deviceName(), "android", pubB64,
+                pairUrl(hub), token, deviceName(), "android", pubB64, androidId(context),
             )
             store.saveIdentity(res.deviceToken, keyB64, res.serverPubkey, hub)
         }
     }
+
+/**
+ * The device's durable OS identity seed: Settings.Secure.ANDROID_ID, read FRESH from
+ * the OS every pairing. It is intrinsic — OS-computed per (device, app signing key) —
+ * so it SURVIVES app uninstall/reinstall AND sign-out/reset and changes only on
+ * factory reset or a signing-key change, unlike the Ed25519 device key the Keystore
+ * wipes on uninstall/sign-out. It is NEVER persisted in app storage (a stored value
+ * would be wiped on sign-out and could not be the durable identity); only this single
+ * pair POST carries it, and the server stores only a salted hash. "" (OS returns none)
+ * degrades the server to pubkey-only dedup.
+ */
+@SuppressLint("HardwareIds")
+private fun androidId(context: Context): String =
+    Settings.Secure.getString(context.contentResolver, Settings.Secure.ANDROID_ID) ?: ""
 
 // wss://host/v1/devices/connect -> https://host/devices/pair/complete
 internal fun pairUrl(hubUrl: String): String {

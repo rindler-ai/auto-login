@@ -17,6 +17,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 
@@ -47,6 +48,7 @@ fun AdvancedScreen(
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
+    val ctx = LocalContext.current
     val cs = MaterialTheme.colorScheme
 
     AppScreen(title = "Advanced", onBack = onBack, footer = true) {
@@ -94,7 +96,7 @@ fun AdvancedScreen(
                 } else {
                     busy = true; error = null
                     scope.launch {
-                        val result = completeEnroll(store, code, h)
+                        val result = completeEnroll(ctx, store, code, h)
                         busy = false
                         result.fold(
                             onSuccess = { onPaired() },
