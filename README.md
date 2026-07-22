@@ -77,6 +77,12 @@ See [`THREAT-MODEL.md`](./THREAT-MODEL.md) for the full trust model,
 
 ## How pairing and relay work
 
+In plain terms: you pair the phone to your hub once, then it stays quietly
+connected. Whenever a sign-in needs a secret, the hub asks the phone, the phone
+hands over just that one secret sealed so only the login can read it, and forgets
+it. You never tap approve — a verified request is handled automatically. The
+technical detail follows.
+
 **Pairing (once per device).** The easy path is **sign-in enrollment**: tap **Sign
 in** on the setup screen. The app opens your hub's `/devices/authorize` page in a
 Custom Tab; you sign in with your hub account, approve the phone, and it enrolls
