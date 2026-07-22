@@ -50,6 +50,36 @@ jobs:
           fi
           echo "Hostname guard passed."
 
+  # --- OCR guard: gitleaks/hostname-guard read TEXT; a screenshot is pixels, so
+  # a real @rindler.ai / infra host baked into a committed image slips past them
+  # (this is exactly how arthur@rindler.ai reached docs/screenshots/*.png). OCR
+  # every committed raster image and deny the same internal identifiers. Unlike
+  # the text hostname-guard, ANY rindler.ai in a screenshot is a leak (demo
+  # screenshots use demo data), so @rindler.ai emails are caught too. ----------
+  screenshot-ocr-guard:
+    name: Screenshot OCR guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install tesseract OCR
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends tesseract-ocr
+      - name: OCR committed images; assert no Rindler host/email in pixels
+        run: |
+          set -euo pipefail
+          shopt -s globstar nullglob
+          fail=0
+          for img in **/*.png **/*.jpg **/*.jpeg; do
+            case "$img" in .git/*) continue;; esac
+            txt="$(tesseract "$img" stdout 2>/dev/null || true)"
+            if printf '%s\n' "$txt" | grep -iEq 'rindler\.ai|[a-z0-9-]+\.onporter\.run|rds\.amazonaws|\binfisical\b'; then
+              echo "::error::Internal identifier (rindler.ai / infra host / @rindler.ai email) detected in image pixels: $img -- recapture the screenshot with demo/placeholder data (e.g. an emulator account)."
+              printf '%s\n' "$txt" | grep -inE 'rindler|onporter|amazonaws|infisical' | head -3
+              fail=1
+            fi
+          done
+          if [ "$fail" -ne 0 ]; then exit 1; fi
+          echo "Screenshot OCR guard passed (no internal identifiers in image pixels)."
+
   # --- Go core + daemon: format, vet, build, test ---------------------------
   go:
     name: Go (${{ matrix.module }})

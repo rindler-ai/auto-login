@@ -267,7 +267,7 @@ fun HomeScreen(
         AlertDialog(
             onDismissRequest = { pendingDelete = null },
             shape = MaterialTheme.shapes.large,
-            icon = { SiteAvatar(site, size = 40) },
+            icon = { SiteLogo(site, size = 40) },
             title = { Text("Remove this login?") },
             text = {
                 Text("Auto Login won't be able to sign you in to $site until you add it again. The stored login is erased from this device.")
