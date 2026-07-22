@@ -23,7 +23,9 @@ android {
         // repo Variables (the hostname-guard + gitleaks block a committed host).
         // 24 -> 25: re-cut of v0.1.0 sending the device fingerprint (ANDROID_ID) at pair
         // so the server dedups a re-pair (reinstall/sign-out) to one device row (#4564).
-        versionCode = 27
+        // 27 -> 28: drop the stale TOTP field from the credential-JSON contract doc
+        // comment (TOTP removed app-wide; no functional Android change).
+        versionCode = 28
         versionName = "0.1.0"
 
         // Backend URLs are build params. The DEFAULTS here are PROD (a plain
