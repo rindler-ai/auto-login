@@ -13,6 +13,12 @@ locked by its hardware security. When something you trust needs to sign in for y
 the one thing that sign-in needs, sealed so nobody in between can read it, and then
 forgets it. You set it up once, and it works hands-free after that.
 
+**Two-factor authentication is fully supported.** When a login needs a one-time
+code, Auto Login reads it on the device — from your **text messages (SMS / phone
+number)** or your **email** — and relays only that code. Your phone number, mailbox,
+and any authenticator (TOTP) seed never leave the phone; the device generates or
+extracts the code locally and hands over just the code.
+
 You can also let a sign-in use **your phone's own internet connection**, so the site
 sees your normal home address instead of a data center. It stays off until you turn it
 on with a single switch.
