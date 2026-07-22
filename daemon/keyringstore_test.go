@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/rindler-ai/auto-login/core/store"
-	"github.com/rindler-ai/auto-login/core/totp"
 )
 
 // fakeKeyring is an in-memory keyringBackend for tests (shared across the
@@ -33,7 +32,6 @@ func TestKeyringStore_PutGetRoundTripsAllFields(t *testing.T) {
 		Site:     "instacart.com",
 		Username: "user@example.com",
 		Password: "hunter2",
-		TOTP:     &totp.Config{Secret: []byte("12345678901234567890"), Digits: 6, Period: 30, Algorithm: totp.SHA1},
 	}
 	if err := s.Put(rec); err != nil {
 		t.Fatalf("Put: %v", err)

@@ -2,7 +2,7 @@
 // it keeps one outbound WebSocket to the device hub and answers each
 // on-demand SecretPing by relaying exactly one secret — HPKE-sealed to the login
 // worker and Ed25519-signed. It wraps the proven, golden-vector-verified
-// custody-app library (protocol/relay/store/totp/otp).
+// custody-app library (protocol/relay/store/otp).
 //
 // BOTH the desktop daemon (package main) and the mobile gomobile binding
 // (package mobile) drive this same core, so the relay/crypto/wire protocol
@@ -27,7 +27,7 @@ import (
 
 // handlePing resolves the one secret the ping asks for from the on-device store
 // and returns the sealed+signed release. suppliedCode carries a manually-entered
-// or out-of-band code (email/SMS/manual kinds); for password/totp it is ignored.
+// or out-of-band code (email/SMS/manual kinds); for password it is ignored.
 // The plaintext secret exists only for the life of this call.
 //
 // serverPub is the Ed25519 key provisioned at pairing. The ping is

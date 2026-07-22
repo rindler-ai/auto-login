@@ -6,18 +6,18 @@
 
 **Sign in to your accounts automatically, without your passwords ever leaving your phone.**
 
-Auto Login turns your phone into a private vault for your logins. Your passwords,
-two-factor codes, and email or text sign-in codes are saved only on your own device,
+Auto Login turns your phone into a private vault for your logins. Your passwords
+and the sign-in codes texted or emailed to you are handled only on your own device,
 locked by its hardware security. When something you trust needs to sign in for you
 (for example, an AI assistant doing a task on your behalf), your phone hands over just
 the one thing that sign-in needs, sealed so nobody in between can read it, and then
 forgets it. You set it up once, and it works hands-free after that.
 
-**Two-factor authentication is fully supported.** When a login needs a one-time
-code, Auto Login reads it on the device — from your **text messages (SMS / phone
-number)** or your **email** — and relays only that code. Your phone number, mailbox,
-and any authenticator (TOTP) seed never leave the phone; the device generates or
-extracts the code locally and hands over just the code.
+**Two-factor codes sent by text or email are supported.** When a login needs a
+one-time code, Auto Login reads it on the device — from your **text messages (SMS /
+phone number)** or your **email** — and relays only that code. Your phone number and
+mailbox never leave the phone; the device reads the code locally and hands over just
+the code.
 
 You can also let a sign-in use **your phone's own internet connection**, so the site
 sees your normal home address instead of a data center. It stays off until you turn it
@@ -55,8 +55,8 @@ source on a Mac with Xcode — see [Build and run](#build-and-run) below.
 **Security posture, in two lines:**
 
 - Durable secrets are stored only on your device and never persist on any server.
-  TOTP seeds and mailbox tokens never leave the device at all — the device
-  generates the one-time code locally and relays only the code.
+  Your mailbox access for email codes never leaves the device at all — the device
+  reads the one-time code locally and relays only the code.
 - Only a single password or a short-lived one-time code ever crosses the wire per
   login, and only inside an HPKE-sealed envelope (RFC 9180) addressed
   end-to-end to the login worker. The hub is semi-trusted and can never read a
@@ -70,7 +70,7 @@ See [`THREAT-MODEL.md`](./THREAT-MODEL.md) for the full trust model,
 
 | Path | What it is |
 |---|---|
-| `core/` | The Go client core. Packages: `protocol` (device-relay wire types + the HPKE seal), `relay` (resolve one secret, seal it, Ed25519-sign the release), `totp` (on-device RFC 6238 codes + `otpauth://` parsing), `store` (the device-local `CredentialStore` interface + an in-memory backing), `otp` (on-device email/SMS one-time-code extraction). No secret ever leaves this layer unsealed. |
+| `core/` | The Go client core. Packages: `protocol` (device-relay wire types + the HPKE seal), `relay` (resolve one secret, seal it, Ed25519-sign the release), `store` (the device-local `CredentialStore` interface + an in-memory backing), `otp` (on-device email/SMS one-time-code extraction). No secret ever leaves this layer unsealed. |
 | `daemon/` | The Go desktop daemon plus the gomobile bridge. `agent/` is the reusable core (hub WebSocket loop, ping to relay, replay guard, pairing); `main.go` is the desktop entrypoint; `mobile/` is the `gomobile bind` surface the native shells drive. Builds the `custody-daemon` binary. |
 | `daemon/shells/` | Thin native shells over the shared Go core: `desktop/`, `android/` (Jetpack Compose), `ios/` and `macos/` (SwiftUI). Each shell owns only what Go must not touch: secure storage and per-release authorization (automatic — every shell auto-approves a verified ping, no tap or biometric). `shells/PARITY.md` records the shared-vs-divergent surface contract. |
 | `contract/` | The language-agnostic wire contract (`device_relay.yaml`) plus a golden test vector (`testdata/device_relay_hpke_golden_vector.json`) proving byte-compatibility with the server. |

@@ -10,7 +10,6 @@ import (
 	"github.com/rindler-ai/auto-login/core/protocol"
 	"github.com/rindler-ai/auto-login/core/relay"
 	"github.com/rindler-ai/auto-login/core/store"
-	"github.com/rindler-ai/auto-login/core/totp"
 )
 
 // workerKey mimics the login worker minting a per-login HPKE recipient; returns
@@ -232,33 +231,6 @@ func TestHandlePing_ForgedPingNeverReadsTheStore(t *testing.T) {
 	}
 	if got := tracked.gets.Load(); got != 0 {
 		t.Fatalf("credential store read %d times for a forged ping, want 0", got)
-	}
-}
-
-// A TOTP ping relays a freshly-generated on-device code (seed never leaves).
-func TestHandlePing_TOTP(t *testing.T) {
-	pub, open := workerKey(t)
-	_, devPriv := devicePair(t)
-	srvPub, srvPriv := serverKey(t)
-	st := store.NewMemStore()
-	cfg := &totp.Config{Secret: []byte("12345678901234567890"), Digits: 6, Period: 30, Algorithm: totp.SHA1}
-	if err := st.Put(store.Record{Site: "site.com", TOTP: cfg}); err != nil {
-		t.Fatal(err)
-	}
-	ping := signPing(t, srvPriv, protocol.SecretPing{
-		RequestID: "r2", Site: "site.com", SecretKind: protocol.SecretTOTPCode,
-		WorkerEphemeralPubkey: pub, Challenge: []byte("n"), TTLSeconds: 30,
-	})
-	rel, err := handlePing(ping, st, devPriv, srvPub, "")
-	if err != nil {
-		t.Fatalf("handlePing totp: %v", err)
-	}
-	code, err := open(protocol.SealInfo("r2", "site.com", protocol.SecretTOTPCode), rel.SealedSecret)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(code) != 6 {
-		t.Fatalf("relayed totp code %q not 6 digits", code)
 	}
 }
 

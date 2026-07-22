@@ -28,7 +28,7 @@ import Foundation
 import Custody // for the MobileApproverProtocol protocol
 
 final class AutoApprover: NSObject, MobileApproverProtocol {
-    /// site = the login host; kind = "password" / "totp" / etc. Called off the main
+    /// site = the login host; kind = "password" / "username" / etc. Called off the main
     /// thread. Auto-approves: a ping only reaches here after the Go core verified
     /// its server signature and anti-replay, so the release is already authorized.
     func approve(_ site: String?, kind: String?) -> Bool {

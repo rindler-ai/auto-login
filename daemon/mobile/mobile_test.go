@@ -37,8 +37,8 @@ func (f fakeSource) ListSites() string {
 	return string(b)
 }
 
-func TestSourceStore_ParsesRecordIncludingTOTP(t *testing.T) {
-	src := fakeSource{"instacart.com": `{"username":"john","password":"pw","totp":{"Secret":"MTIzNDU2Nzg5MDEyMzQ1Njc4OTA=","Digits":6,"Period":30,"Algorithm":"SHA1"}}`}
+func TestSourceStore_ParsesRecord(t *testing.T) {
+	src := fakeSource{"instacart.com": `{"username":"john","password":"pw"}`}
 	ss := sourceStore{src: src}
 	rec, err := ss.Get("instacart.com")
 	if err != nil {
@@ -46,9 +46,6 @@ func TestSourceStore_ParsesRecordIncludingTOTP(t *testing.T) {
 	}
 	if rec.Username != "john" || rec.Password != "pw" {
 		t.Fatalf("bad record: %+v", rec)
-	}
-	if rec.TOTP == nil || rec.TOTP.Digits != 6 || rec.TOTP.Algorithm != "SHA1" {
-		t.Fatalf("totp not parsed: %+v", rec.TOTP)
 	}
 }
 

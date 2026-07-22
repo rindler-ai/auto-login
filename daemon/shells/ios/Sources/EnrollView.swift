@@ -1,21 +1,17 @@
 // EnrollView — the "Add a login" form, ported from the Compose `ui/EnrollScreen.kt`.
 // This is the ONLY screen that WRITES a
-// credential: it captures site + username + password (+ an iOS-kept TOTP secret), builds
+// credential: it captures site + username + password, builds
 // the credential-JSON contract, and hands it to the native `KeychainSecretSource.enroll`
 // (the Go core never writes). On save it calls `onDone()`, which the nav shell also wires
 // to the back arrow.
 //
-// Two deliberate divergences from the redesign (both recorded in PARITY.md):
+// One deliberate divergence from the redesign (recorded in PARITY.md):
 //   • CATALOG STRIPPED — Android's live site-catalog autocomplete (CatalogClient /
 //     fetchSupportedSites / SupportedSite, the suggestion dropdown, the six catalog-only
 //     supportingText strings, and the isSupported-gated saveEnabled) is Android-only and
 //     dropped. iOS ships a PLAIN Website field: no suggestions, no supporting text, and
 //     saveEnabled = site & username non-empty (trimmed) — exactly Android's catalog-failed
 //     fallback branch, with the enroll key = site.trim().
-//   • TOTP RETAINED — the redesign has no TOTP field; the existing iOS shell already
-//     captures + validates a TOTP secret and the credential-JSON contract supports it, so
-//     iOS KEEPS it as an intentional superset (field + base32DecodeToBase64 + the
-//     {username,password,totp:{Secret,Digits,Period,Algorithm}} object).
 //
 // Pure SwiftUI over the shared Theme.swift / Components.swift tokens; compiles for BOTH
 // iOS (WindowGroup) and macOS (MenuBarExtra) — no UIKit-only APIs. Navigation is wired by
@@ -32,12 +28,10 @@ struct EnrollView: View {
     @State private var site = ""
     @State private var username = ""
     @State private var password = ""
-    @State private var totp = ""
     @State private var pwVisible = false
-    @State private var saveError: String?
 
     /// Android's catalog-failed fallback rule, used as iOS's ONLY rule: site + username
-    /// non-blank (both trimmed). Password is NOT required; TOTP is optional.
+    /// non-blank (both trimmed). Password is NOT required.
     private var saveEnabled: Bool {
         !site.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             && !username.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -78,19 +72,6 @@ struct EnrollView: View {
                     .accessibilityLabel(pwVisible ? "Hide password" : "Show password")
                 }
 
-                Spacer().frame(height: 14)
-
-                // iOS-kept superset (not in the redesign): an optional TOTP secret.
-                // Its supporting caption doubles as the inline validation error.
-                AppTextField(
-                    "TOTP secret (optional)",
-                    text: $totp,
-                    isError: saveError != nil,
-                    font: AutoLoginType.mono,
-                    supportingText: saveError
-                )
-                .onChange(of: totp) { _ in saveError = nil }
-
                 Spacer().frame(height: 28)
 
                 PrimaryButton("Save to this device", enabled: saveEnabled) {
@@ -118,21 +99,10 @@ struct EnrollView: View {
     private func save() {
         let siteTrimmed = site.trimmingCharacters(in: .whitespacesAndNewlines)
         let usernameTrimmed = username.trimmingCharacters(in: .whitespacesAndNewlines)
-        let totpTrimmed = totp.trimmingCharacters(in: .whitespacesAndNewlines)
 
-        // Validate TOTP if provided: a non-empty field must decode successfully.
-        if !totpTrimmed.isEmpty && base32DecodeToBase64(totpTrimmed) == nil {
-            saveError = "Couldn't read that TOTP secret — check for typos or extra spaces."
-            return
-        }
-
-        // Credential-JSON contract (see PARITY.md): {username, password[, totp]}. Password
-        // is stored raw/untrimmed; the raw base32 TOTP secret is decoded to raw bytes then
-        // base64'd before storage. TOTP omitted when blank.
-        var dict: [String: Any] = ["username": usernameTrimmed, "password": password]
-        if !totpTrimmed.isEmpty, let seed = base32DecodeToBase64(totpTrimmed) {
-            dict["totp"] = ["Secret": seed, "Digits": 6, "Period": 30, "Algorithm": "SHA1"]
-        }
+        // Credential-JSON contract (see PARITY.md): {username, password}. Password
+        // is stored raw/untrimmed.
+        let dict: [String: Any] = ["username": usernameTrimmed, "password": password]
         if let data = try? JSONSerialization.data(withJSONObject: dict),
            let json = String(data: data, encoding: .utf8) {
             // enroll key = site.trim() (Android's catalog-failed fallback branch).
@@ -140,19 +110,4 @@ struct EnrollView: View {
         }
         onDone()
     }
-}
-
-/// RFC 4648 base32 decode -> raw bytes -> base64.
-/// A TOTP secret is stored as base64 of the RAW base32-decoded seed, per shells/PARITY.md.
-func base32DecodeToBase64(_ s: String) -> String? {
-    let alphabet = Array("ABCDEFGHIJKLMNOPQRSTUVWXYZ234567")
-    let map = Dictionary(uniqueKeysWithValues: alphabet.enumerated().map { ($1, $0) })
-    var bits = 0, value = 0
-    var out = [UInt8]()
-    for c in s.uppercased() where c != "=" {
-        guard let v = map[c] else { return nil }
-        value = (value << 5) | v; bits += 5
-        if bits >= 8 { out.append(UInt8((value >> (bits - 8)) & 0xFF)); bits -= 8 }
-    }
-    return Data(out).base64EncodedString()
 }

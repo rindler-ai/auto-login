@@ -4,12 +4,9 @@
 // `lookup(site)` per approved ping and expects the credential record as a JSON
 // STRING, or "" when the device holds nothing for the site:
 //
-//   {"username":"…","password":"…",
-//    "totp":{"Secret":"<base64 raw seed>","Digits":6,"Period":30,"Algorithm":"SHA1"}}
+//   {"username":"…","password":"…"}
 //
-// `totp` is optional — omit it (or null) for password-only sites. `Secret` is
-// base64 of the RAW seed bytes (already base32-decoded), matching totp.Config's
-// []byte field. Storage is EncryptedSharedPreferences, whose master key lives in
+// Storage is EncryptedSharedPreferences, whose master key lives in
 // the Android Keystore (hardware-backed where available). An approved requested
 // value is loaded transiently and sealed to the login worker; the durable record
 // remains in native storage.

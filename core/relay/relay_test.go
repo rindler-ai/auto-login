@@ -10,11 +10,9 @@ import (
 	"reflect"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/rindler-ai/auto-login/core/protocol"
 	"github.com/rindler-ai/auto-login/core/store"
-	"github.com/rindler-ai/auto-login/core/totp"
 )
 
 // newWorkerKey mimics the server minting a per-login recipient key; returns
@@ -63,17 +61,12 @@ func basePing(pub []byte) protocol.SecretPing {
 func TestResolveSecret(t *testing.T) {
 	rec := store.Record{
 		Site: "s.com", Username: "john", Password: "pw",
-		TOTP: &totp.Config{Secret: []byte("12345678901234567890"), Digits: 6, Period: 30, Algorithm: totp.SHA1},
 	}
 	if v, err := ResolveSecret(rec, protocol.SecretUsername, ""); err != nil || v != "john" {
 		t.Errorf("username: %q %v", v, err)
 	}
 	if v, err := ResolveSecret(rec, protocol.SecretPassword, ""); err != nil || v != "pw" {
 		t.Errorf("password: %q %v", v, err)
-	}
-	code, err := ResolveSecret(rec, protocol.SecretTOTPCode, "")
-	if err != nil || len(code) != 6 {
-		t.Errorf("totp: %q %v", code, err)
 	}
 	if v, err := ResolveSecret(rec, protocol.SecretManualCode, "482913"); err != nil || v != "482913" {
 		t.Errorf("manual: %q %v", v, err)
@@ -378,7 +371,7 @@ func TestBuildReleaseValidates(t *testing.T) {
 		mut  func(p *protocol.SecretPing)
 	}{
 		{"no request_id", func(p *protocol.SecretPing) { p.RequestID = "" }},
-		{"unknown secret_kind", func(p *protocol.SecretPing) { p.SecretKind = protocol.SecretKind("totp_seed") }},
+		{"unknown secret_kind", func(p *protocol.SecretPing) { p.SecretKind = protocol.SecretKind("not_a_kind") }},
 		{"no worker key", func(p *protocol.SecretPing) { p.WorkerEphemeralPubkey = nil }},
 		{"no challenge", func(p *protocol.SecretPing) { p.Challenge = nil }},
 		{"no server signature", func(p *protocol.SecretPing) { p.ServerSignature = nil }},
@@ -520,39 +513,5 @@ func TestPairingFingerprint_GoldenVector(t *testing.T) {
 	// The commitment is truncated SHA-256 to PairingFingerprintLen bytes.
 	if n := len(PairingFingerprint(nil)); n != PairingFingerprintLen {
 		t.Errorf("fingerprint length = %d, want %d", n, PairingFingerprintLen)
-	}
-}
-
-// A TOTP-kind ping must relay a fresh code, and the code must be openable and
-// match an independently-generated code for the same instant.
-func TestTOTPRelay(t *testing.T) {
-	pub, open := newWorkerKey(t)
-	_, devPriv := newEd25519(t)
-	srvPub, srvPriv := newEd25519(t)
-	cfg := &totp.Config{Secret: []byte("12345678901234567890"), Digits: 6, Period: 30, Algorithm: totp.SHA1}
-	rec := store.Record{Site: "s", TOTP: cfg}
-	code, err := ResolveSecret(rec, protocol.SecretTOTPCode, "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	ping := signPing(srvPriv, protocol.SecretPing{
-		RequestID: "r", Site: "s", SecretKind: protocol.SecretTOTPCode,
-		WorkerEphemeralPubkey: pub, Challenge: []byte("n"), TTLSeconds: 30,
-	})
-	rel, err := BuildRelease(ping, code, devPriv, srvPub)
-	if err != nil {
-		t.Fatal(err)
-	}
-	got, err := open(protocol.SealInfo("r", "s", protocol.SecretTOTPCode), rel.SealedSecret)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.EqualFold(string(got), code) {
-		t.Fatalf("relayed code %q != resolved %q", got, code)
-	}
-	// sanity: the code is a valid 6-digit TOTP right now
-	if want, _ := cfg.GenerateAt(time.Now()); want != string(got) && want != code {
-		// codes can roll over a period boundary between calls; tolerate only if equal to one of them
-		t.Logf("note: code rolled over period boundary (got=%s want=%s)", got, want)
 	}
 }

@@ -23,10 +23,10 @@ The device speaks one language-agnostic wire contract
 
 ## Assets
 
-- **Durable secrets:** site passwords, TOTP seeds, and mailbox/OTP tokens (OAuth
+- **Durable secrets:** site passwords and mailbox/OTP tokens (OAuth
   or IMAP credentials used to read email one-time codes).
-- **Short-lived secrets:** a generated TOTP code, an email/SMS one-time code, or a
-  manually typed code — each valid only briefly.
+- **Short-lived secrets:** an email/SMS one-time code or a manually typed code —
+  each valid only briefly.
 - **Device identity:** the device's long-lived Ed25519 signing key and its device
   bearer token.
 - **Server ping-signing key:** the hub's Ed25519 public key, captured by the
@@ -55,16 +55,15 @@ property.
 
 ### 2. No durable secret ever transits
 
-TOTP seeds and mailbox tokens **never cross the wire**. The device generates the
-TOTP code locally from the seed, and reads the email/SMS one-time code locally
-from the mailbox or message, then relays only the resulting **code**. The only
+Mailbox tokens **never cross the wire**. The device reads the email/SMS one-time
+code locally from the mailbox or message, then relays only the resulting **code**. The only
 durable value that ever transits is the password, and only inside the sealed
 envelope below, held in memory and discarded after the login.
 
 ### 3. End-to-end sealing to the worker (the hub cannot read durable secrets)
 
-> Scope note: this section covers passwords, usernames, and app-generated (TOTP)
-> codes. SMS and manually typed one-time codes do NOT ride the sealed lane — they
+> Scope note: this section covers passwords and usernames. SMS and manually typed
+> one-time codes do NOT ride the sealed lane — they
 > are POSTed to the hub over TLS so it can route them to the waiting login, so the
 > hub does see those short-lived codes.
 
@@ -153,7 +152,7 @@ never the login itself.
   signature; the device rejects the rest.
 - Substitute its own recipient key to harvest a secret. The signature covers the
   worker key, and the pairing binding pins the signing key.
-- Extract a durable second-factor secret. TOTP seeds and mailbox tokens never
+- Extract a durable second-factor secret. Mailbox tokens never
   leave the device.
 - Release a secret without a validly-signed request, or replay one to get a
   secret twice. (A validly-signed ping IS auto-approved on every platform, by
@@ -216,4 +215,4 @@ These are real limitations. The design does not claim to defend against them.
 | Release authentication / anti-replay | Ed25519 signature by the device over a domain-separated, length-prefixed `(request_id, challenge, worker key, sealed secret)` tuple; single-use `request_id`; TTL; on-device dedup |
 | Pairing key binding | Server-key fingerprint bound into the single-use pairing code (trust-on-first-use over the human channel), constant-time verified device-side |
 | Transport | Mandatory `wss://` (TLS); cleartext refused to non-loopback hosts |
-| Second factors | On-device TOTP (RFC 6238) and on-device email/SMS code extraction; seeds and tokens never transit |
+| Second factors | On-device email/SMS one-time-code extraction; the code is relayed and mailbox tokens never transit |

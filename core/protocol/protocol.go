@@ -7,8 +7,8 @@
 // with the std crypto/hpke worker on the server.
 //
 // INVARIANT (mirrors the server): no wire message carries a durable secret. The
-// device generates TOTP/OTP codes locally and relays only the code; only the
-// password + short-lived codes ever cross, inside the HPKE-sealed SecretRelease.
+// device reads SMS/email one-time codes locally and relays only the code; only
+// the password + short-lived codes ever cross, inside the HPKE-sealed SecretRelease.
 package protocol
 
 // ProtocolVersion is the wire version; must match the server's. v2 adds the
@@ -23,7 +23,6 @@ type SecretKind string
 const (
 	SecretUsername     SecretKind = "username"
 	SecretPassword     SecretKind = "password"
-	SecretTOTPCode     SecretKind = "totp_code"
 	SecretEmailOTPCode SecretKind = "email_otp_code"
 	SecretSMSOTPCode   SecretKind = "sms_otp_code"
 	SecretManualCode   SecretKind = "manual_code"
@@ -31,7 +30,7 @@ const (
 
 // AllSecretKinds is the closed set; order matches schema/device_relay.yaml.
 var AllSecretKinds = []SecretKind{
-	SecretUsername, SecretPassword, SecretTOTPCode,
+	SecretUsername, SecretPassword,
 	SecretEmailOTPCode, SecretSMSOTPCode, SecretManualCode,
 }
 

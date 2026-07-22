@@ -28,11 +28,11 @@ SMS-capture files are platform-specific and intentionally **not** mapped.
 - Approval is **uniform and automatic on every shell** (`AutoApprover` on iOS/macOS/Android): a release is authorized with NO per-release user interaction (a server-signed ping is authorized by construction; the frictionless, never-reopen-the-app, autonomous-login design). There is no biometric/tap gate on any platform. The real gate is cryptographic: every release requires a `SecretPing` verified against the paired server pubkey, which the Go core checks before it ever calls the approver.
 - A missing Approver always declines. Android's always-on service auto-approves verified pings whether or not its activity is foreground; the headless desktop binary has no approval surface, so it (Approve=nil) releases nothing.
 - The bound mobile Approver is boolean-only, so device pings currently support
-  `username`, `password`, and `totp_code`. `email_otp_code`, `sms_otp_code`, and
-  `manual_code` decline at the client; the iOS manual/SMS submit routes are a
-  separate rendezvous and do not supply a `SecretPing` callback value.
+  `username` and `password`. `email_otp_code`, `sms_otp_code`, and `manual_code`
+  decline at the client; the iOS manual/SMS submit routes are a separate
+  rendezvous and do not supply a `SecretPing` callback value.
 - `approve(site,kind)` / `lookup(site)` bridges **block** the Go caller thread until answered.
-- Credential-JSON contract: `{"username","password","totp":{"Secret":"<base64 of the RAW, already base32-decoded, seed>","Digits":6,"Period":30,"Algorithm":"SHA1"}}` — `totp` optional.
+- Credential-JSON contract: `{"username","password"}`.
 - The secret source owns **all writes** and the site index; Go never writes.
 - Device-identity keys are reserved names (`rindler-meta:*`), never a site host.
 - **Pairing persists THREE things** (`rindler-meta:device-token`, `rindler-meta:device-key`,
@@ -51,10 +51,6 @@ Android (`MainActivity.kt`) is the lead shell; its copy below is canonical and i
 - **HOME** — header "Auto Login"; relay button "Pause protection"/"Resume protection"; status "Active"/"Paused" with subtitle "Your logins are ready when the hub needs them"; saved-logins section header "Saved logins" (with a separate count); empty-list text "No logins yet" + "Add a site and Auto Login can sign you in whenever you ask."; list item prefix "• " (bullet + space before the site). (There is NO approval status — releases are automatic; see "Shared behavior rules".)
 - **Manual code entry** — title "Enter code"; field "2FA code"; button "Submit".
 - **Privacy Policy (Settings row)** — title "Privacy Policy"; subtitle "How your logins and codes are handled"; opens `https://your-hub.example/privacy`. Not cosmetic: Apple Guideline 5.1.1(i) requires the policy to be reachable from inside the app, and Play wants the same URL in its Data safety declaration. Do not remove it from either shell.
-
-## Known reconciliation gaps
-
-- **TOTP enrollment.** iOS's ENROLL screen has a working "TOTP secret (optional)" field (base32 decode + storage); Android's `EnrollScreen` has none. iOS is intentionally ahead here — Android needs to add it (a mirror nudge should fire on `MainActivity.kt` until it does). Verified still open 2026-07-14.
 
 ## Divergent-by-design surfaces — NEVER nudged
 

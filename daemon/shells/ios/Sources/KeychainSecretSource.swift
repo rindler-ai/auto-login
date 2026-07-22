@@ -7,13 +7,10 @@
 // approved ping and expects the credential record as a JSON STRING, or "" when
 // the device holds nothing for the site:
 //
-//   {"username":"…","password":"…",
-//    "totp":{"Secret":"<base64 raw seed>","Digits":6,"Period":30,"Algorithm":"SHA1"}}
+//   {"username":"…","password":"…"}
 //
-// `totp` is optional — omit it (or send null) for password-only sites. `Secret` is
-// base64 of the RAW seed bytes (already base32-decoded), matching totp.Config's
-// []byte field. Go parses one record after approval, seals only the requested
-// value to the login worker, and leaves the durable source of truth in this store.
+// Go parses one record after approval, seals only the requested value to the
+// login worker, and leaves the durable source of truth in this store.
 
 import Foundation
 import Security
@@ -233,8 +230,7 @@ final class KeychainSecretSource: NSObject, MobileSecretSourceProtocol {
     // MARK: enrollment (writes) — native side owns this; Go never writes.
 
     /// Persist a credential record for a site. Build `json` as the contract above.
-    /// The "Add login" sheet (EnrollView) captures username/password + optional
-    /// TOTP otpauth:// secret, base64-encodes the raw seed, and calls this.
+    /// The "Add login" sheet (EnrollView) captures username/password and calls this.
     func enroll(site: String, json: String) {
         Keychain.write(account: site, value: json)
         Keychain.addSite(site)   // so HOME can list it (mirrors Android)
