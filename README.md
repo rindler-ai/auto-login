@@ -23,6 +23,8 @@ You can also let a sign-in use **your phone's own internet connection**, so the 
 sees your normal home address instead of a data center. It stays off until you turn it
 on with a single switch.
 
+**Available now on Android. iOS support is coming soon.**
+
 ## 📲 Install
 
 **[⬇️ Download the latest Android APK from Releases →](https://github.com/rindler-ai/auto-login/releases/latest)**
