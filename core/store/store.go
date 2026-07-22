@@ -4,7 +4,7 @@
 // follow-up; MemStore here is the testable in-memory backing (issue,
 // ).
 //
-// The store is the ONLY place a durable secret (password, TOTP seed, mailbox
+// The store is the ONLY place a durable secret (password, mailbox
 // token) lives, and it lives ONLY on the device. The relay package reads exactly
 // one value out of it per approved ping and seals it; the store never serializes
 // a secret onto the wire.
@@ -13,8 +13,6 @@ package store
 import (
 	"errors"
 	"sync"
-
-	"github.com/rindler-ai/auto-login/core/totp"
 )
 
 // Record is the credential set held for one site. Any field may be empty when
@@ -23,7 +21,6 @@ type Record struct {
 	Site     string
 	Username string
 	Password string
-	TOTP     *totp.Config // nil if the site has no TOTP; the seed never leaves the device
 }
 
 // ErrNotFound is returned when no record exists for a site.

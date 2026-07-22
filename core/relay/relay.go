@@ -103,9 +103,8 @@ func PairingFingerprint(serverPub ed25519.PublicKey) []byte {
 
 // ResolveSecret maps a ping's secret_kind to the actual value to relay, reading
 // only what that one kind needs from the record. A durable secret (password) is
-// read verbatim; a code (TOTP) is generated on-device from the stored seed;
-// email/SMS/manual codes are supplied by the caller (mailbox fetch / user entry)
-// — the seed or mailbox token behind them never leaves the device.
+// read verbatim; email/SMS/manual codes are supplied by the caller (mailbox
+// fetch / user entry) — the mailbox token behind them never leaves the device.
 func ResolveSecret(rec store.Record, kind protocol.SecretKind, suppliedCode string) (string, error) {
 	switch kind {
 	case protocol.SecretUsername:
@@ -118,11 +117,6 @@ func ResolveSecret(rec store.Record, kind protocol.SecretKind, suppliedCode stri
 			return "", errors.New("relay: no password on record")
 		}
 		return rec.Password, nil
-	case protocol.SecretTOTPCode:
-		if rec.TOTP == nil {
-			return "", errors.New("relay: no TOTP configured for site")
-		}
-		return rec.TOTP.Now()
 	case protocol.SecretEmailOTPCode, protocol.SecretSMSOTPCode, protocol.SecretManualCode:
 		if suppliedCode == "" {
 			return "", ErrManualCodeRequired

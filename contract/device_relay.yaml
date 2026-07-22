@@ -7,10 +7,10 @@
 # validated against this file by a contract test; other-language clients read this
 # file + the golden vector directly.
 #
-# INVARIANT: no message on this wire may carry a DURABLE secret. TOTP seeds and
-# mailbox OAuth tokens NEVER transit — the device generates the code locally and
-# relays only the code. Only the username/password pair and short-lived one-time
-# codes ever cross the wire, and only inside the HPKE-sealed SecretRelease.
+# INVARIANT: no message on this wire may carry a DURABLE secret. Mailbox tokens
+# NEVER transit — the device reads the emailed / texted code on-device and relays
+# only the code. Only the username/password pair and short-lived one-time codes
+# ever cross the wire, and only inside the HPKE-sealed SecretRelease.
 
 # v2: the SecretPing is now server-signed so the device can authenticate the
 # worker_ephemeral_pubkey. BREAKING: devices paired under v1 hold no server_pubkey and
@@ -24,7 +24,6 @@ version: 2
 secret_kinds:
   - username        # account identifier (not itself secret, sealed anyway)
   - password        # the one durable secret that transits, in-memory only
-  - totp_code       # 6-digit RFC-6238 code, generated on-device from a seed that never transits
   - email_otp_code  # code read on-device via device-local mailbox OAuth (token never transits)
   - sms_otp_code    # code captured on-device (Android SMS User Consent / manual)
   - manual_code     # user typed the code into the manual-entry sheet

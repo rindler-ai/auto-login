@@ -4,11 +4,11 @@ Auto Login is built around one principle: **your secrets stay on your device.**
 
 ## What is stored, and where
 
-- Your site credentials, TOTP seeds, and mailbox/OTP tokens are stored **only on
+- Your site credentials and mailbox/OTP tokens are stored **only on
   your own device**, in the OS keychain / keystore. They are never stored, logged,
   or persisted on any server.
-- Long-lived second-factor material (TOTP seeds, mailbox tokens) **never leaves the
-  device**. The device generates the one-time code locally and relays only the
+- The long-lived mailbox credential (your IMAP app-password) **never leaves the
+  device**. The device reads the incoming one-time code locally and relays only the
   code.
 
 ## What crosses the network
@@ -21,7 +21,7 @@ Auto Login is built around one principle: **your secrets stay on your device.**
   would rather not disclose that, the app falls back to a lettered placeholder icon
   when the fetch fails, and the request can be removed outright — see `SiteFavicon`.
 - Per login, at most a single password or a short-lived one-time code crosses the
-  wire. Passwords and app-generated codes travel inside an HPKE-sealed envelope the
+  wire. Passwords travel inside an HPKE-sealed envelope the
   hub cannot open. **SMS and manually typed codes are the exception**: they are sent
   to the hub over TLS so it can hand them to the login that is waiting, which means
   the hub does see those short-lived codes. It never sees your durable credentials.

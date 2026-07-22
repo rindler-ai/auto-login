@@ -26,15 +26,13 @@ import (
 	"github.com/rindler-ai/auto-login/core/otp"
 	"github.com/rindler-ai/auto-login/core/protocol"
 	"github.com/rindler-ai/auto-login/core/store"
-	"github.com/rindler-ai/auto-login/core/totp"
 	"github.com/rindler-ai/auto-login/daemon/agent"
 )
 
 // SecretSource is implemented on the NATIVE side (iOS Secure Enclave / Android
 // Keystore). Lookup returns the credential record for a site as a JSON object
-// — {"username":"…","password":"…","totp":{"Secret":"<base64>","Digits":6,
-// "Period":30,"Algorithm":"SHA1"}} — or "" when the device holds nothing for the
-// site. After approval, the Go core parses it, resolves+seals exactly ONE
+// — {"username":"…","password":"…"} — or "" when the device holds nothing for
+// the site. After approval, the Go core parses it, resolves+seals exactly ONE
 // requested value, and discards the transient plaintext; the durable source of
 // truth remains in native storage.
 type SecretSource interface {
@@ -394,7 +392,7 @@ func approveAdapter(appr Approver, codeSink CodeExpectationSink) func(context.Co
 	// on its kind (never off the raw read loop, which sees unverified frames).
 	return func(_ context.Context, ping protocol.SecretPing) (string, bool) {
 		switch ping.SecretKind {
-		case protocol.SecretUsername, protocol.SecretPassword, protocol.SecretTOTPCode:
+		case protocol.SecretUsername, protocol.SecretPassword:
 			// A durable secret release, auto-approved on every shell (no per-release
 			// user interaction). The bound Approver returns only a boolean;
 			// the Go core seals the value.
@@ -439,9 +437,8 @@ func approveAdapter(appr Approver, codeSink CodeExpectationSink) func(context.Co
 type sourceStore struct{ src SecretSource }
 
 type recordJSON struct {
-	Username string       `json:"username"`
-	Password string       `json:"password"`
-	TOTP     *totp.Config `json:"totp"`
+	Username string `json:"username"`
+	Password string `json:"password"`
 }
 
 func (s sourceStore) Get(site string) (store.Record, error) {
@@ -453,7 +450,7 @@ func (s sourceStore) Get(site string) (store.Record, error) {
 	if err := json.Unmarshal([]byte(raw), &r); err != nil {
 		return store.Record{}, errors.New("mobile: SecretSource returned invalid JSON")
 	}
-	return store.Record{Site: site, Username: r.Username, Password: r.Password, TOTP: r.TOTP}, nil
+	return store.Record{Site: site, Username: r.Username, Password: r.Password}, nil
 }
 
 func (sourceStore) Put(store.Record) error { return errors.New("mobile: store is read-only") }

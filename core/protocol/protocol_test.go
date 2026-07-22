@@ -14,8 +14,8 @@ func TestSecretKindValidity(t *testing.T) {
 			t.Errorf("%q should be valid", k)
 		}
 	}
-	if SecretKind("totp_seed").Valid() {
-		t.Error("totp_seed must be invalid — seeds never transit")
+	if SecretKind("not_a_kind").Valid() {
+		t.Error("an unknown secret kind must be invalid")
 	}
 }
 
@@ -38,7 +38,7 @@ func TestSecretKindsMatchSchema(t *testing.T) {
 
 func TestWireJSONKeys(t *testing.T) {
 	ping := SecretPing{
-		RequestID: "r", Site: "s", SecretKind: SecretTOTPCode, WorkerEphemeralPubkey: []byte("k"),
+		RequestID: "r", Site: "s", SecretKind: SecretPassword, WorkerEphemeralPubkey: []byte("k"),
 		Challenge: []byte("c"), TTLSeconds: 30, ServerSignature: []byte("sig"),
 	}
 	b, err := json.Marshal(ping)
@@ -54,7 +54,7 @@ func TestWireJSONKeys(t *testing.T) {
 	if err := json.Unmarshal(b, &got); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	if got.SecretKind != SecretTOTPCode || got.TTLSeconds != 30 || string(got.ServerSignature) != "sig" {
+	if got.SecretKind != SecretPassword || got.TTLSeconds != 30 || string(got.ServerSignature) != "sig" {
 		t.Fatalf("round-trip lost data: %+v", got)
 	}
 }

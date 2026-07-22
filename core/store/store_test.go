@@ -3,8 +3,6 @@ package store
 import (
 	"sync"
 	"testing"
-
-	"github.com/rindler-ai/auto-login/core/totp"
 )
 
 func TestMemStoreCRUD(t *testing.T) {
@@ -12,12 +10,12 @@ func TestMemStoreCRUD(t *testing.T) {
 	if _, err := s.Get("nope"); err != ErrNotFound {
 		t.Errorf("empty get: want ErrNotFound, got %v", err)
 	}
-	rec := Record{Site: "s.com", Username: "u", Password: "p", TOTP: &totp.Config{Secret: []byte("seed12345678901234"), Digits: 6, Period: 30}}
+	rec := Record{Site: "s.com", Username: "u", Password: "p"}
 	if err := s.Put(rec); err != nil {
 		t.Fatalf("put: %v", err)
 	}
 	got, err := s.Get("s.com")
-	if err != nil || got.Username != "u" || got.Password != "p" || got.TOTP == nil {
+	if err != nil || got.Username != "u" || got.Password != "p" {
 		t.Fatalf("get: %+v %v", got, err)
 	}
 	if sites, err := s.ListSites(); err != nil || len(sites) != 1 || sites[0] != "s.com" {

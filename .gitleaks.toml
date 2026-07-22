@@ -86,8 +86,4 @@ regexes = [
   '''rindler-device-relay''',              # protocol domain tag (wire constant, not a host)
   '''github\.com/rindler-ai''',            # publisher GitHub org (allowed)
   '''ai\.rindler\.(autologin|mobile)''',   # app bundle id / gomobile package (allowed)
-  # Public RFC/synthetic TOTP test vectors used in *_test.go fixtures (not secrets):
-  '''MTIzNDU2Nzg5MDEyMzQ1Njc4OTA=''',      # base64 of the RFC 6238 test seed
-  '''12345678901234567890''',              # RFC 6238 test seed
-  '''JBSWY3DPEHPK3PXP''',                  # RFC 4648 base32 test vector
 ]

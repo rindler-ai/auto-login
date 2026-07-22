@@ -39,7 +39,7 @@ func ResolveSecretWithSource(ctx context.Context, rec store.Record, kind protoco
 		}
 		return "", ErrManualCodeRequired
 	default:
-		// username / password / totp_code — no code source involved.
+		// username / password — no code source involved.
 		return ResolveSecret(rec, kind, suppliedCode)
 	}
 }

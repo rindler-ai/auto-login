@@ -8,7 +8,6 @@ import (
 	"sync"
 
 	"github.com/rindler-ai/auto-login/core/store"
-	"github.com/rindler-ai/auto-login/core/totp"
 )
 
 // KeyringStore backs the device-local credential store with the OS keychain
@@ -52,10 +51,9 @@ func NewKeyringStore(kr keyringBackend) *KeyringStore { return &KeyringStore{kr:
 // store.Record with explicit fields so serialization is stable and independent
 // of the library type's layout.
 type keyringRecord struct {
-	Site     string       `json:"site"`
-	Username string       `json:"username,omitempty"`
-	Password string       `json:"password,omitempty"`
-	TOTP     *totp.Config `json:"totp,omitempty"`
+	Site     string `json:"site"`
+	Username string `json:"username,omitempty"`
+	Password string `json:"password,omitempty"`
 }
 
 func (s *KeyringStore) Get(site string) (store.Record, error) {
@@ -72,7 +70,7 @@ func (s *KeyringStore) Get(site string) (store.Record, error) {
 	if err := json.Unmarshal([]byte(raw), &kr); err != nil {
 		return store.Record{}, fmt.Errorf("keyring decode %q: %w", site, err)
 	}
-	return store.Record{Site: kr.Site, Username: kr.Username, Password: kr.Password, TOTP: kr.TOTP}, nil
+	return store.Record{Site: kr.Site, Username: kr.Username, Password: kr.Password}, nil
 }
 
 func (s *KeyringStore) Put(rec store.Record) error {
@@ -81,7 +79,7 @@ func (s *KeyringStore) Put(rec store.Record) error {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	b, err := json.Marshal(keyringRecord{Site: rec.Site, Username: rec.Username, Password: rec.Password, TOTP: rec.TOTP})
+	b, err := json.Marshal(keyringRecord{Site: rec.Site, Username: rec.Username, Password: rec.Password})
 	if err != nil {
 		return fmt.Errorf("keyring encode %q: %w", rec.Site, err)
 	}

@@ -5,7 +5,7 @@ credentials on **this device**, keeps one outbound WebSocket to the device
 hub, and answers each on-demand `SecretPing` by relaying exactly one
 secret — HPKE-sealed to the login worker and Ed25519-signed. It wraps the
 golden-vector-verified `custody-app` library (`protocol` / `relay` / `store` /
-`totp` / `otp`) unchanged — no new crypto.
+`otp`) unchanged — no new crypto.
 
 **Cross-platform strategy: one Go core, thin native shells.** The reusable core
 is package [`agent`](./agent) (hub WebSocket + ping→relay + replay guard + the
@@ -28,10 +28,10 @@ on every platform. See [`BUILD.md`](./BUILD.md) and [`shells/`](./shells).
 
 ## What's done + tested (race-clean)
 
-- Ping→relay for password + TOTP + no-credential; **hermetic end-to-end** (real
+- Ping→relay for password + no-credential; **hermetic end-to-end** (real
   `Run` loop vs a fake hub; the release opens under the worker key + verifies).
 - **Replay defense**: a replayed `request_id` is declined, never released twice.
-- **Keychain store**: put/get round-trips every field incl. TOTP; site index;
+- **Keychain store**: put/get round-trips every field; site index;
   delete. Native backends compile for darwin/linux/windows.
 - **Pairing**: the `/devices/pair/complete` call (only the PUBLIC key leaves the
   device) + keychain persistence + keychain-first reload.
