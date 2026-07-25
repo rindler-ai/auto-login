@@ -36,6 +36,11 @@ class MainActivity : FragmentActivity() {
     // completes pairing. Never logged — it carries a pairing token.
     private var pendingEnroll by mutableStateOf<EnrollRequest?>(null)
 
+    // A "code needed" notification tap while the app is ALREADY running: onCreate is not
+    // called again (singleTask), so the cold-start `initialDest` path below can't route it.
+    // onNewIntent flips this instead, and AutoLoginApp navigates to the manual-code screen.
+    private var navToManualCode by mutableStateOf(false)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         // A credential-custody app must never leak a password / pairing code / typed
@@ -76,6 +81,8 @@ class MainActivity : FragmentActivity() {
                     pendingEnroll = pendingEnroll,
                     onEnrollConsumed = { pendingEnroll = null },
                     initialDest = initialDest,
+                    navToManualCode = navToManualCode,
+                    onManualCodeConsumed = { navToManualCode = false },
                 )
             }
         }
@@ -85,6 +92,11 @@ class MainActivity : FragmentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         handleEnrollIntent(intent)
+        // A "code needed" tap while the app is already alive lands here (not onCreate). Route
+        // it to the manual-code screen the same way a cold-start tap does via initialDest.
+        if (intent.getStringExtra(CodeNeededNotifier.EXTRA_NAV) == CodeNeededNotifier.NAV_MANUAL_CODE) {
+            navToManualCode = true
+        }
     }
 
     // Extract a sign-in enrollment token from a deep-link intent, if present, then CONSUME

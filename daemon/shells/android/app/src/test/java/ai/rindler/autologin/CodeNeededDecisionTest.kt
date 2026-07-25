@@ -6,21 +6,19 @@ import org.testng.Assert.assertTrue
 import org.testng.annotations.Test
 
 /*
- * Testing strategy for the two "code needed" prompt decisions.
+ * Testing strategy for the "code needed" prompt decisions.
  *
- * The feature: an authenticated code-expectation ping arms the reader, but if the channel
- * CAN'T actually read, the login stalls silently. Each decision answers "must we prompt the
- * user to enter the code by hand?" — TRUE exactly when the channel cannot auto-read. The
- * oracles below come from that spec property (channel can serve IFF all of its conditions
- * hold), not from re-deriving the implementation, so they keep holding for any legal
- * reimplementation.
+ * The feature: an authenticated code-expectation ping arms the reader. Each decision below is a
+ * pure predicate over that moment:
  *
  * shouldPromptForSms(smsEnabled, hasPermission):
- *   partition smsEnabled:    true, false
- *   partition hasPermission: true, false
- *   The legal space is exactly 2x2, covered EXHAUSTIVELY. SMS auto-read needs BOTH the
- *   opt-in AND RECEIVE_SMS, so the ONE cell that must NOT prompt is (true, true); the three
- *   cells missing either condition must prompt.
+ *   decides IMMEDIATE prompt vs the 30s grace. TRUE (prompt at once) exactly when SMS auto-read
+ *   CANNOT serve — there is nothing to wait for. FALSE (take the grace) only when it CAN, i.e.
+ *   both the opt-in AND RECEIVE_SMS hold. Legal space is exactly 2x2, covered exhaustively.
+ *
+ * shouldNotifyCodeNeeded(stillExpecting):
+ *   the post-grace check on the auto-read path — nudge IFF a code is still awaited after the
+ *   grace (none auto-filled: an RCS code the app can't read, or a slow text).
  *
  * shouldPromptForEmail(emailEnabled, linkedCount):
  *   partition emailEnabled: true, false
@@ -33,46 +31,46 @@ import org.testng.annotations.Test
  */
 class CodeNeededDecisionTest {
 
-    // ---- SMS: exhaustive 2x2 -------------------------------------------------------------
+    // ---- SMS: immediate-prompt-vs-grace, exhaustive 2x2 ---------------------------------
 
-    /** covers (true, true) — opted in AND permitted: auto-read serves, so NO prompt. */
+    /** (true, true) — opted in AND permitted: auto-read may serve, so take the grace (don't
+     *  prompt up front). */
     @Test
-    fun smsDoesNotPromptWhenFullyArmed() {
+    fun smsTakesGraceWhenFullyArmed() {
         assertFalse(shouldPromptForSms(smsEnabled = true, hasPermission = true))
     }
 
-    /** covers (true, false) — opted in but RECEIVE_SMS denied: can't read, so prompt. */
+    /** (true, false) — opted in but RECEIVE_SMS denied: can't read, so prompt immediately. */
     @Test
-    fun smsPromptsWhenPermissionDenied() {
+    fun smsPromptsImmediatelyWhenPermissionDenied() {
         assertTrue(shouldPromptForSms(smsEnabled = true, hasPermission = false))
     }
 
-    /** covers (false, true) — permitted but opted out: nothing watches, so prompt. */
+    /** (false, true) — permitted but SMS read toggled OFF: nothing watches, so prompt at once. */
     @Test
-    fun smsPromptsWhenOptedOut() {
+    fun smsPromptsImmediatelyWhenOptedOut() {
         assertTrue(shouldPromptForSms(smsEnabled = false, hasPermission = true))
     }
 
-    /** covers (false, false) — neither: prompt. */
+    /** (false, false) — neither: prompt immediately. */
     @Test
-    fun smsPromptsWhenNeither() {
+    fun smsPromptsImmediatelyWhenNeither() {
         assertTrue(shouldPromptForSms(smsEnabled = false, hasPermission = false))
     }
 
     /**
-     * The spec invariant across the whole 2x2: prompt IFF the channel cannot auto-read, and
-     * SMS can auto-read only when BOTH conditions hold. Fails if the AND is ever weakened to
-     * an OR (a single condition wrongly counted as "can read").
+     * The spec invariant: prompt-immediately IFF auto-read cannot serve, and it can serve only
+     * when BOTH the opt-in and RECEIVE_SMS hold. Fails if the AND is ever weakened to an OR.
      */
     @Test
-    fun smsPromptsExactlyWhenNotBothConditionsHold() {
+    fun smsPromptsImmediatelyExactlyWhenItCannotAutoRead() {
         for (enabled in listOf(true, false)) {
             for (permission in listOf(true, false)) {
                 val canAutoRead = enabled && permission
                 assertEquals(
                     shouldPromptForSms(enabled, permission),
                     !canAutoRead,
-                    "prompt must be the negation of can-auto-read (enabled=$enabled, permission=$permission)",
+                    "immediate-prompt must be the negation of can-auto-read (enabled=$enabled, permission=$permission)",
                 )
             }
         }
@@ -125,5 +123,24 @@ class CodeNeededDecisionTest {
                 )
             }
         }
+    }
+
+    // ---- code-needed notification: fire at the 30s grace IFF a code is still awaited --------
+
+    /*
+     * The RCS/late-code rule: an OTP request arms the reader and opens a window; a notification
+     * is fired only after a 30s grace, and only if the login is STILL awaiting a code then. If a
+     * code auto-arrived within the grace it disarmed the window, so we stay silent; if the window
+     * is still open (RCS the app can't read, or a slow text) we prompt. Uniform across every
+     * device-relay OTP. The decision is the pure predicate; the 30s wait + the isExpecting read
+     * are the impure timing around it.
+     */
+
+    /** covers (stillExpecting=true) — no code within the grace ⇒ prompt; and (false) — a code
+     *  landed and closed the window ⇒ stay silent. Two cells kill a constant mutation. */
+    @Test
+    fun notifiesAfterGraceOnlyWhileStillExpecting() {
+        assertTrue(shouldNotifyCodeNeeded(stillExpecting = true))
+        assertFalse(shouldNotifyCodeNeeded(stillExpecting = false))
     }
 }

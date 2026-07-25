@@ -17,9 +17,12 @@ internal fun emailAutoReadActive(optedIn: Boolean, mailboxLinked: Boolean): Bool
     optedIn && mailboxLinked
 
 /**
- * The manual "Enter a login code" row is the reliability floor: shown whenever EITHER code
- * channel can't auto-read, hidden ONLY when BOTH SMS and email auto-read are active (codes
- * fill themselves then, so the row would be clutter). i.e. `!(smsActive && emailActive)`.
+ * The REQUEST-SCOPED manual-entry affordance: visible exactly while a device-relay OTP window
+ * is open ([expecting] == SmsExpectation.isExpecting), hidden otherwise. Unlike an always-on
+ * floor, this appears only when a login is actively awaiting a code —
+ * outside that window a typed code has no waiting login (the rendezvous replies no_pending_login),
+ * so the affordance would be inert. It shows the instant a relay OTP is requested (so a code that
+ * can't auto-fill — RCS the app can't read, or SMS auto-read that missed — can still be entered)
+ * and disappears when the code is received, is typed, or the window expires.
  */
-internal fun manualCodeRowVisible(smsActive: Boolean, emailActive: Boolean): Boolean =
-    !(smsActive && emailActive)
+internal fun manualEntryVisible(expecting: Boolean): Boolean = expecting

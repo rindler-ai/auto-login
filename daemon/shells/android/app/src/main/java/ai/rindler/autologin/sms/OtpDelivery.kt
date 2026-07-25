@@ -20,6 +20,7 @@
 package ai.rindler.autologin.sms
 
 import ai.rindler.autologin.BuildConfig
+import ai.rindler.autologin.CodeNeededNotifier
 import ai.rindler.autologin.CodeSubmitResult
 import ai.rindler.autologin.KeystoreSecretSource
 import ai.rindler.autologin.submitOtpCode
@@ -62,7 +63,13 @@ object OtpDelivery {
         scope.launch {
             // Close the expecting-code window the moment the code lands with a waiting
             // login, so no later text this login triggers is ever inspected (single-shot).
-            if (deliverWithRetry(hub, token, code)) SmsExpectation.disarm(app.applicationContext, gen)
+            if (deliverWithRetry(hub, token, code)) {
+                SmsExpectation.disarm(app.applicationContext, gen)
+                // A text can auto-read AFTER the 30s "code needed" notice fired (e.g. it arrived
+                // at ~45s): the login has now continued on its own, so clear that stale prompt —
+                // the user must never be left typing a code that already went through.
+                CodeNeededNotifier.cancel(app.applicationContext)
+            }
         }
     }
 

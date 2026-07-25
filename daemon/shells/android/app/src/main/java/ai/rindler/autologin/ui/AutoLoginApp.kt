@@ -93,6 +93,10 @@ internal fun AutoLoginApp(
     // recreate restores the saved Dest and ignores this — so it can never fight the §4d
     // restored instance state.
     initialDest: Dest? = null,
+    // Set true by MainActivity.onNewIntent when a "code needed" notification is tapped while the
+    // app is ALREADY running (a warm launch, where the cold-start initialDest never applies).
+    navToManualCode: Boolean = false,
+    onManualCodeConsumed: () -> Unit = {},
 ) {
     val ctx = LocalContext.current
     // Reduced-motion (OS animator scale 0): the nav slide becomes a plain cross-fade.
@@ -155,6 +159,16 @@ internal fun AutoLoginApp(
         if (wasRevoked) {
             if (dest != Dest.Pair) go(Dest.Pair, isForward = false)
             RelayService.clearRevoked()
+        }
+    }
+
+    // A "code needed" notification tapped while the app was already running (warm launch via
+    // MainActivity.onNewIntent) routes here: jump to the manual-code screen, then consume the
+    // one-shot so a later recompose / config change never re-navigates on its own.
+    LaunchedEffect(navToManualCode) {
+        if (navToManualCode) {
+            if (dest != Dest.ManualCode) go(Dest.ManualCode)
+            onManualCodeConsumed()
         }
     }
 

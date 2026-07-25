@@ -25,8 +25,26 @@ android {
         // so the server dedups a re-pair (reinstall/sign-out) to one device row (#4564).
         // 27 -> 28: drop the stale TOTP field from the credential-JSON contract doc
         // comment (TOTP removed app-wide; no functional Android change).
-        versionCode = 28
-        versionName = "0.1.0"
+        // 28 -> 29 / versionName 0.1.1: request-scoped manual code entry + a 30s-delayed
+        // "code needed" notification (5-min expiry, auto-cancel when a code arrives late), so
+        // a code the app can't auto-read (an RCS "business" message) still gets in by hand.
+        // 29 -> 30: the "code needed" notice moves to a HIGH-importance channel with an explicit
+        // vibration pattern (a channel's importance is frozen at creation, so a NEW channel id
+        // is required for it to buzz on existing installs) — a login code must not arrive silent.
+        // 30 -> 31: tapping the "code needed" notification opens the manual-code screen even when
+        // the app is already running (warm launch via onNewIntent, not just a cold initialDest);
+        // and the manual-code screen auto-closes once the code window expires / the code arrived
+        // another way, so the user never types a code that can no longer be accepted.
+        // 31 -> 32: when SMS auto-read can't serve (toggled off or RECEIVE_SMS denied), the "code
+        // needed" notice fires IMMEDIATELY on request instead of after the 30s grace — the grace
+        // only exists to give auto-read a chance, so there is nothing to wait for.
+        // 32 -> 33: pre-release audit fixes -- the manual-entry disarm now carries the
+        // generation captured when the screen opened (reading it at disarm made the guard
+        // vacuous, so a submit for one login could close a newer overlapping login's window),
+        // and both the manual screen's auto-close and the Home row honor the EMAIL lane, not
+        // just SMS (an emailed "code needed" tap used to bounce straight back to Home).
+        versionCode = 33
+        versionName = "0.1.1"
 
         // Backend URLs are build params. The DEFAULTS here are PROD (a plain
         // release APK ships against prod); the `debug` build type below points at

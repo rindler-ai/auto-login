@@ -13,8 +13,11 @@
 package ai.rindler.autologin.ui
 
 import ai.rindler.autologin.BuildConfig
+import ai.rindler.autologin.CodeNeededNotifier
 import ai.rindler.autologin.CodeSubmitResult
 import ai.rindler.autologin.KeystoreSecretSource
+import ai.rindler.autologin.email.EmailExpectation
+import ai.rindler.autologin.sms.SmsExpectation
 import ai.rindler.autologin.submitOtpCode
 import android.content.Context
 import android.view.accessibility.AccessibilityManager
@@ -106,6 +109,11 @@ fun ManualCodeScreen(
     // saved; `state` stays transient (a mid-submit status should reset on recreate).
     var code by rememberSaveable { mutableStateOf("") }
     var state by remember { mutableStateOf<SubmitState>(SubmitState.Idle) }
+    // The expectation window THIS entry belongs to, captured when the screen opened. Reading
+    // the generation at disarm time instead would make SmsExpectation's guard vacuous (both
+    // sides would read the same value), so a submit for login A would close a newer
+    // overlapping login B's window and silently kill B's auto-read.
+    val entryGeneration = remember { SmsExpectation.currentGeneration() }
 
     // After a successful send, hold "Sent" on screen for a beat, then close. The success
     // StatusLine is a Polite live region, but at 1000ms the screen auto-closes before
@@ -113,8 +121,31 @@ fun ManualCodeScreen(
     // touch exploration is on, hold ~3x longer so the announcement lands before the close.
     LaunchedEffect(state) {
         if (state is SubmitState.Success) {
+            // The code was accepted, so this login is no longer awaiting one: close ITS window
+            // (which hides the request-scoped Home affordance) and clear any "code needed"
+            // notice. Passing the generation captured at entry is what makes disarm single-shot:
+            // a newer overlapping login that re-armed keeps its own window.
+            SmsExpectation.disarm(ctx, entryGeneration)
+            CodeNeededNotifier.cancel(ctx)
             delay(if (screenReaderActive(ctx)) 3000 else 1000)
             onDone()
+        }
+    }
+
+    // Auto-close when the code window is no longer open — the login's ~5-minute window expired,
+    // or the code already arrived another way (auto-read) and disarmed it. Either way the code
+    // can no longer be accepted, so don't leave the user typing one that will just be rejected.
+    // Held off while a submit is in flight (don't yank it mid-POST) and after a success (that
+    // path closes itself above). Polled once a second, matching the Home affordance.
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(1000)
+            if (state !is SubmitState.Submitting && state !is SubmitState.Success &&
+                !codeEntryStillWanted(ctx)
+            ) {
+                onDone()
+                break
+            }
         }
     }
 
@@ -205,3 +236,14 @@ private fun StatusRow(state: SubmitState) {
         else -> Unit
     }
 }
+
+/**
+ * True while SOME login is still awaiting a hand-typed code -- SMS **or** email.
+ *
+ * Both lanes route their "code needed" notification to this one screen, but only the SMS lane
+ * arms [SmsExpectation]; the email lane arms EmailExpectation. Polling SMS alone would bounce a
+ * user who tapped an emailed code-needed notice straight back to Home about a second later,
+ * with the request-scoped Home row also hidden -- i.e. no way to enter the code at all.
+ */
+internal fun codeEntryStillWanted(ctx: Context): Boolean =
+    SmsExpectation.isExpecting(ctx) || EmailExpectation.isExpecting(ctx)

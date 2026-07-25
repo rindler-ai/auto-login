@@ -107,20 +107,20 @@ fun HomeScreen(
     }
     var stepsLeft by remember { mutableStateOf(setupStepsLeft()) }
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { stepsLeft = setupStepsLeft() }
-    // SMS auto-read counts as ACTIVE only when opted in AND still granted. Re-derived on
-    // resume, never remembered: Android can auto-revoke the grant from an idle app and the
-    // user can revoke it in system Settings, and either must bring the manual-code row back
-    // rather than leave them with no way to finish a sign-in.
-    fun smsAutoReadActive(): Boolean = store.isSmsAutoReadEnabled() && SmsAutoRead.hasPermission(ctx)
-    var smsActive by remember { mutableStateOf(smsAutoReadActive()) }
-    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { smsActive = smsAutoReadActive() }
-    // Email auto-read is active only when opted in AND a mailbox is linked (email's analog of
-    // the SMS permission). Re-derived on resume, never remembered, for the same reason as SMS:
-    // a mailbox added in the link flow, or removed / broken on the manage page, must bring the
-    // manual-code row back rather than leave the user with no way to finish a sign-in.
-    fun emailAutoReadActiveNow(): Boolean = emailAutoReadActive(store.isEmailAutoReadEnabled(), store.isEmailLinked())
-    var emailActive by remember { mutableStateOf(emailAutoReadActiveNow()) }
-    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { emailActive = emailAutoReadActiveNow() }
+    // The manual-entry affordance is REQUEST-SCOPED to the device-relay OTP window: it appears
+    // the moment a login asks for a code and disappears when the code arrives (auto-read or
+    // typed) or the window's ~5-minute TTL expires. Polled, not remembered: the window is opened
+    // by a background ping and closed by a background delivery OR by its own TTL, so a poll
+    // reflects all three without an event bus, and it is refreshed on resume so returning from
+    // the "code needed" notification shows it immediately.
+    var expecting by remember { mutableStateOf(codeEntryStillWanted(ctx)) }
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { expecting = codeEntryStillWanted(ctx) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            expecting = codeEntryStillWanted(ctx)
+            delay(1000)
+        }
+    }
     // Linked mailboxes — re-derived on resume so a mailbox that broke while the poll ran (or
     // was added/removed on the manage page) is reflected without a manual refresh. Drives the
     // conditional Home email row: ABSENT when nothing is linked, a live "reading from N"
@@ -204,16 +204,16 @@ fun HomeScreen(
             )
         }
 
-        // Type a code by hand — the reliability floor. Hidden ONLY while BOTH SMS and email
-        // auto-read are active, since codes fill themselves then and the row is just clutter;
-        // it reappears the moment EITHER channel can't auto-read (a toggle switched off, an
-        // SMS permission revoked, or a mailbox unlinked/broken), so any code that can't fill
-        // itself still has a manual path.
-        if (manualCodeRowVisible(smsActive, emailActive)) {
+        // Type a code by hand — REQUEST-SCOPED to an active login. It appears the moment a login
+        // asks for a code and disappears when the code is received, is typed, or the 5-minute
+        // window expires. This is how a code the app can't auto-read (an RCS "business" message)
+        // still gets in: the login waits, the user reads the code on their phone and types it
+        // here. Outside a waiting login there is nothing to submit to, so it stays hidden.
+        if (manualEntryVisible(expecting)) {
             SettingRow(
                 leading = Icons.Rounded.Dialpad,
                 title = "Enter a login code",
-                supporting = "Type a code from a text or email if it wasn't filled in automatically",
+                supporting = "A login is waiting for a code. If we can read it from your texts we'll fill it in; if not, enter it here.",
                 trailing = RowTrailing.Chevron,
                 onClick = onEnterCode,
             )

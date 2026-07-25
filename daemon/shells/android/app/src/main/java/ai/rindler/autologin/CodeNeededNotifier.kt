@@ -29,10 +29,10 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 
 /**
- * True IFF SMS auto-read CANNOT serve the waiting login, so the user must be prompted to
- * enter the code by hand. Auto-read needs BOTH the opt-in [smsEnabled] AND [hasPermission]
- * (RECEIVE_SMS); missing either means no text is ever read and the login would stall. Pure
- * so it is unit-tested without Android (CodeNeededDecisionTest).
+ * True IFF SMS auto-read CANNOT serve the waiting login (opt-in off OR RECEIVE_SMS denied), so
+ * there is nothing for the 30s grace to wait on and the user should be prompted IMMEDIATELY.
+ * When it CAN serve (both hold), the sink instead waits out the grace and prompts only if no
+ * code auto-filled. Auto-read needs BOTH [smsEnabled] and [hasPermission]. Pure; unit-tested.
  */
 fun shouldPromptForSms(smsEnabled: Boolean, hasPermission: Boolean): Boolean =
     !(smsEnabled && hasPermission)
@@ -47,9 +47,35 @@ fun shouldPromptForSms(smsEnabled: Boolean, hasPermission: Boolean): Boolean =
 fun shouldPromptForEmail(emailEnabled: Boolean, linkedCount: Int): Boolean =
     !(emailEnabled && linkedCount > 0)
 
+/**
+ * True IFF, after the fixed grace window since a device-relay OTP was requested, the login is
+ * STILL awaiting a code — so the user should be nudged (by notification) to enter it by hand.
+ * [stillExpecting] is SmsExpectation.isExpecting read AFTER the grace: a code that auto-arrived
+ * within the grace has already disarmed the window (stillExpecting == false) and we stay silent;
+ * a window still open (an RCS code the app can't read, or a slow/absent text) means no code
+ * filled itself, so we prompt. Uniform for every relay OTP. Pure so the rule is unit-tested
+ * (CodeNeededDecisionTest) without Android; the 30s wait and the isExpecting read are the impure
+ * timing around this predicate.
+ */
+fun shouldNotifyCodeNeeded(stillExpecting: Boolean): Boolean = stillExpecting
+
 object CodeNeededNotifier {
-    private const val CHANNEL = "code_needed"
+    // NEW channel id (was "code_needed", IMPORTANCE_DEFAULT/silent). A NotificationChannel's
+    // importance + vibration are FROZEN at creation — recreating "code_needed" with a higher
+    // importance is ignored on any device that already registered it, so a login code (time
+    // sensitive) kept arriving as a silent, easy-to-miss notice. A fresh id lets the HIGH
+    // importance + vibration below actually take on existing installs.
+    private const val CHANNEL = "code_needed_urgent"
     private const val NOTIF_ID = 43 // distinct from EmailHealthNotifier's 42
+
+    // Buzz like a messaging app so a waiting login code is not missed: wait, buzz, pause, buzz.
+    private val VIBRATE_PATTERN = longArrayOf(0L, 400L, 200L, 400L)
+
+    // Auto-expire the notice after ~5 minutes — about the minimum lifetime of a login code, so
+    // once the code it refers to has certainly expired the stale "enter a code" prompt clears
+    // itself even if the user never opened it. (setTimeoutAfter cancels the posted notification
+    // after the elapsed time; it does not affect an already-dismissed one.)
+    private const val NOTIF_TIMEOUT_MS = 5 * 60_000L
 
     // Read by MainActivity to route a notification tap to the manual code screen. A plain
     // String extra (not a parcelable) so it survives the OS delivering the PendingIntent.
@@ -78,8 +104,12 @@ object CodeNeededNotifier {
                 val ch = NotificationChannel(
                     CHANNEL,
                     "Sign-in codes to enter",
-                    NotificationManager.IMPORTANCE_DEFAULT,
-                ).apply { description = "Tells you when a login needs a code this device can't fill in for you" }
+                    NotificationManager.IMPORTANCE_HIGH,
+                ).apply {
+                    description = "Buzzes when a login is waiting for a code you need to enter"
+                    enableVibration(true)
+                    vibrationPattern = VIBRATE_PATTERN
+                }
                 ctx.getSystemService(NotificationManager::class.java).createNotificationChannel(ch)
             }
             val open = PendingIntent.getActivity(
@@ -94,11 +124,24 @@ object CodeNeededNotifier {
                 .setContentText(text)
                 .setAutoCancel(true)
                 .setContentIntent(open)
-                .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+                .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .setCategory(NotificationCompat.CATEGORY_MESSAGE)
+                .setVibrate(VIBRATE_PATTERN)
+                .setTimeoutAfter(NOTIF_TIMEOUT_MS)
                 .build()
             // notify() is a no-op if POST_NOTIFICATIONS is denied (SDK 33+); the manual code
             // screen stays reachable from Home, so we never need to check the grant first.
             NotificationManagerCompat.from(ctx).notify(NOTIF_ID, notif)
         }
+    }
+
+    /**
+     * Clear a shown "code needed" notice. Called when the awaited code actually arrives — a
+     * text auto-read that landed AFTER the 30s prompt fired (the login already continued, so the
+     * user must not be left staring at a prompt for a code that went through), a manually typed
+     * code, or the window expiring. Best-effort and idempotent: a no-op if nothing is showing.
+     */
+    fun cancel(app: Context) {
+        runCatching { NotificationManagerCompat.from(app.applicationContext).cancel(NOTIF_ID) }
     }
 }
