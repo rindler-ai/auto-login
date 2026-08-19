@@ -14,7 +14,11 @@ ALLOWED_RUNNERS = [
 HOSTED_RUNNER = /\A(?:ubuntu|macos|windows)-/i
 
 def workflow_documents(root)
-  Dir.glob(File.join(root, WORKFLOW_GLOB)).sort.flat_map do |path|
+  paths = Dir.glob(File.join(root, WORKFLOW_GLOB), File::FNM_DOTMATCH).reject do |path|
+    [".", ".."].include?(File.basename(path))
+  end
+
+  paths.sort.flat_map do |path|
     relative_path = path.delete_prefix("#{root}/")
     source = File.read(path)
     lines = source.lines
@@ -165,12 +169,26 @@ Dir.mktmpdir("authored-workflows") do |root|
         steps:
           - run: "true"
   YAML
+  File.write(File.join(workflow_dir, ".hosted.yml"), <<~YAML)
+    name: Dot-prefixed hosted workflow
+    jobs:
+      hosted:
+        runs-on: ubuntu-latest
+        timeout-minutes: 5
+        steps:
+          - run: "true"
+  YAML
 
-  third_workflow_violations = directory_policy_violations(root)
-  unless third_workflow_violations.any? do |violation|
+  added_workflow_violations = directory_policy_violations(root)
+  unless added_workflow_violations.any? do |violation|
     violation.include?("third.yaml document 2") && violation.include?("ubuntu-latest")
   end
     raise "policy test is vacuous: added hosted-runner .yaml workflow was accepted"
+  end
+  unless added_workflow_violations.any? do |violation|
+    violation.include?(".hosted.yml") && violation.include?("ubuntu-latest")
+  end
+    raise "policy test is vacuous: dot-prefixed hosted-runner workflow was accepted"
   end
 end
 
